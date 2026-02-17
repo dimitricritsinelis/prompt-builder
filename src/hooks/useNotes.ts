@@ -21,6 +21,9 @@ type UseNotesResult = {
     bodyJson: string,
     bodyText: string,
   ) => Promise<void>;
+  pinNote: (id: string, pinned: boolean) => Promise<void>;
+  trashNote: (id: string) => Promise<void>;
+  restoreNote: (id: string) => Promise<void>;
 };
 
 export function useNotes(): UseNotesResult {
@@ -41,6 +44,9 @@ export function useNotes(): UseNotesResult {
     setSearchQuery,
     updateTitle,
     saveBody,
+    pinNote,
+    trashNote,
+    restoreNote,
   } = useNoteStore();
 
   useEffect(() => {
@@ -81,5 +87,8 @@ export function useNotes(): UseNotesResult {
     setSearchQuery,
     updateTitle,
     saveBody,
+    pinNote,
+    trashNote,
+    restoreNote,
   };
 }

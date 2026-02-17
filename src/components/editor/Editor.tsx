@@ -192,6 +192,17 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     };
   }, [flush]);
 
+  useEffect(() => {
+    const handleForceSave = () => {
+      void flush();
+    };
+
+    window.addEventListener("promptpad:force-save", handleForceSave);
+    return () => {
+      window.removeEventListener("promptpad:force-save", handleForceSave);
+    };
+  }, [flush]);
+
   if (!editor) {
     return null;
   }

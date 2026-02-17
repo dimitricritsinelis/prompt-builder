@@ -159,6 +159,24 @@ impl Db {
         Ok(())
     }
 
+    pub fn restore_note(&self, id: &str) -> Result<(), String> {
+        let conn = self.get_conn()?;
+        let changed = conn
+            .execute(
+                "UPDATE notes
+                 SET is_trashed = 0, updated_at = datetime('now')
+                 WHERE id = ?1",
+                params![id],
+            )
+            .map_err(|error| format!("failed to restore note {id}: {error}"))?;
+
+        if changed == 0 {
+            return Err(format!("note not found: {id}"));
+        }
+
+        Ok(())
+    }
+
     pub fn delete_note_permanent(&self, id: &str) -> Result<(), String> {
         let conn = self.get_conn()?;
         let changed = conn

@@ -16,6 +16,7 @@ pub fn run() {
             commands::note_get,
             commands::note_update,
             commands::note_delete,
+            commands::note_restore,
             commands::note_delete_permanent,
             commands::note_list,
             commands::note_search,

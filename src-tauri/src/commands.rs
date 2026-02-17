@@ -28,6 +28,11 @@ pub fn note_delete(db: State<'_, Db>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn note_restore(db: State<'_, Db>, id: String) -> Result<(), String> {
+    db.restore_note(&id)
+}
+
+#[tauri::command]
 pub fn note_delete_permanent(db: State<'_, Db>, id: String) -> Result<(), String> {
     db.delete_note_permanent(&id)
 }
