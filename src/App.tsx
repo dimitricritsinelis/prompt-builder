@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorPane } from "./components/layout/EditorPane";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -174,6 +174,24 @@ function App() {
     }
   };
 
+  const handleUpdateTitle = useCallback(
+    async (title: string) => {
+      await updateTitle(title);
+    },
+    [updateTitle],
+  );
+
+  const handleSaveBody = useCallback(
+    async (id: string, title: string, bodyJson: string, bodyText: string) => {
+      await saveBody(id, title, bodyJson, bodyText);
+    },
+    [saveBody],
+  );
+
+  const handleStatsChange = useCallback((wordCount: number) => {
+    setEditorWordCount(wordCount);
+  }, []);
+
   return (
     <div className="relative flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <Sidebar
@@ -205,15 +223,9 @@ function App() {
       <section className="flex min-w-0 flex-1 flex-col">
         <EditorPane
           activeNote={activeNote}
-          onUpdateTitle={async (title) => {
-            await updateTitle(title);
-          }}
-          onSaveBody={async (id, title, bodyJson, bodyText) => {
-            await saveBody(id, title, bodyJson, bodyText);
-          }}
-          onStatsChange={(wordCount) => {
-            setEditorWordCount(wordCount);
-          }}
+          onUpdateTitle={handleUpdateTitle}
+          onSaveBody={handleSaveBody}
+          onStatsChange={handleStatsChange}
         />
         <StatusBar
           saveState={saveLabel}

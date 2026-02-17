@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { Note } from "../lib/tauri";
 import { useNoteStore } from "../stores/noteStore";
 
@@ -73,6 +73,9 @@ export function useNotes(): UseNotesResult {
     return () => window.clearTimeout(timeoutId);
   }, [hasLoaded, loadNotes, searchNotes, searchQuery]);
 
+  const createFreeformNote = useCallback(() => createNote("freeform"), [createNote]);
+  const createPromptNote = useCallback(() => createNote("prompt"), [createNote]);
+
   return {
     notes,
     activeNote,
@@ -81,8 +84,8 @@ export function useNotes(): UseNotesResult {
     isLoading,
     saveState,
     error,
-    createFreeformNote: () => createNote("freeform"),
-    createPromptNote: () => createNote("prompt"),
+    createFreeformNote,
+    createPromptNote,
     setActiveNote,
     setSearchQuery,
     updateTitle,

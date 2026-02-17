@@ -9,6 +9,7 @@ type UseEditorAutosaveOptions = {
   noteId: string;
   initialBodyJson: string;
   initialBodyText: string;
+  getPayload: () => EditorAutosavePayload;
   onSave: (bodyJson: string, bodyText: string) => Promise<void>;
 };
 
@@ -16,35 +17,47 @@ export function useEditorAutosave({
   noteId,
   initialBodyJson,
   initialBodyText,
+  getPayload,
   onSave,
 }: UseEditorAutosaveOptions) {
   const debounceRef = useRef<number | null>(null);
-  const pendingRef = useRef<EditorAutosavePayload | null>(null);
+  const isDirtyRef = useRef(false);
   const lastSavedRef = useRef<EditorAutosavePayload>({
     bodyJson: initialBodyJson,
     bodyText: initialBodyText,
   });
+  const onSaveRef = useRef(onSave);
+  const getPayloadRef = useRef(getPayload);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  useEffect(() => {
+    getPayloadRef.current = getPayload;
+  }, [getPayload]);
 
   const flush = useCallback(async () => {
-    const pending = pendingRef.current;
-    if (!pending) return;
+    if (!isDirtyRef.current) return;
+
+    const pending = getPayloadRef.current();
 
     const unchanged =
       pending.bodyJson === lastSavedRef.current.bodyJson &&
       pending.bodyText === lastSavedRef.current.bodyText;
     if (unchanged) {
-      pendingRef.current = null;
+      isDirtyRef.current = false;
       return;
     }
 
-    await onSave(pending.bodyJson, pending.bodyText);
+    await onSaveRef.current(pending.bodyJson, pending.bodyText);
     lastSavedRef.current = pending;
-    pendingRef.current = null;
-  }, [onSave]);
+    isDirtyRef.current = false;
+  }, []);
 
   const queueSave = useCallback(
-    (payload: EditorAutosavePayload) => {
-      pendingRef.current = payload;
+    () => {
+      isDirtyRef.current = true;
       if (debounceRef.current) {
         window.clearTimeout(debounceRef.current);
       }
@@ -58,21 +71,26 @@ export function useEditorAutosave({
 
   useEffect(() => {
     lastSavedRef.current = { bodyJson: initialBodyJson, bodyText: initialBodyText };
-    pendingRef.current = null;
+    isDirtyRef.current = false;
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
   }, [initialBodyJson, initialBodyText, noteId]);
 
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) {
         window.clearTimeout(debounceRef.current);
       }
-      void flush();
+      void flushRef.current();
     };
-  }, [flush, noteId]);
+  }, [noteId]);
 
   return { queueSave, flush };
 }

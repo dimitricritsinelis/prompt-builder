@@ -7,8 +7,8 @@ import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { JSONContent } from "@tiptap/core";
-import { useCallback, useEffect, useMemo } from "react";
+import type { Editor as TiptapEditor, JSONContent } from "@tiptap/core";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { PromptBlock, PromptBlockSlashMenu } from "../../extensions/prompt-block";
 import { PROMPT_BLOCKS, type PromptBlockType } from "../../lib/promptBlocks";
 import type { Note } from "../../lib/tauri";
@@ -56,6 +56,17 @@ function deriveBodyText(editorText: string): string {
 
 function deriveWordCount(bodyText: string): number {
   return bodyText ? bodyText.split(/\s+/).filter(Boolean).length : 0;
+}
+
+function extractBodyText(editor: TiptapEditor): string {
+  return deriveBodyText(editor.state.doc.textBetween(0, editor.state.doc.content.size, "\n\n"));
+}
+
+function deriveSavePayload(editor: TiptapEditor): { bodyJson: string; bodyText: string } {
+  return {
+    bodyJson: JSON.stringify(editor.getJSON()),
+    bodyText: extractBodyText(editor),
+  };
 }
 
 function ToolbarButton({
@@ -118,6 +129,7 @@ function InsertBlockSelect({
 
 export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   const initialDoc = useMemo(() => parseStoredDoc(note.bodyJson), [note.bodyJson]);
+  const editorRef = useRef<TiptapEditor | null>(null);
   const saveBody = useCallback(
     async (bodyJson: string, bodyText: string) => {
       await onSaveBody(note.id, note.title, bodyJson, bodyText);
@@ -128,6 +140,16 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     noteId: note.id,
     initialBodyJson: note.bodyJson,
     initialBodyText: note.bodyText,
+    getPayload: () => {
+      const instance = editorRef.current;
+      if (!instance) {
+        return {
+          bodyJson: note.bodyJson,
+          bodyText: note.bodyText,
+        };
+      }
+      return deriveSavePayload(instance);
+    },
     onSave: saveBody,
   });
 
@@ -168,18 +190,18 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
       },
     },
     onCreate: ({ editor: instance }) => {
-      const bodyText = deriveBodyText(
-        instance.state.doc.textBetween(0, instance.state.doc.content.size, "\n\n"),
-      );
+      editorRef.current = instance;
+      const bodyText = extractBodyText(instance);
       onStatsChange(deriveWordCount(bodyText));
     },
     onUpdate: ({ editor: instance }) => {
-      const bodyJson = JSON.stringify(instance.getJSON());
-      const bodyText = deriveBodyText(
-        instance.state.doc.textBetween(0, instance.state.doc.content.size, "\n\n"),
-      );
+      editorRef.current = instance;
+      const bodyText = extractBodyText(instance);
       onStatsChange(deriveWordCount(bodyText));
-      queueSave({ bodyJson, bodyText });
+      queueSave();
+    },
+    onDestroy: () => {
+      editorRef.current = null;
     },
     onBlur: () => {
       void flush();
