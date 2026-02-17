@@ -6,6 +6,8 @@ type SidebarProps = {
   onSearchChange: (value: string) => void;
   onNewNote: () => void;
   onNewPrompt: () => void;
+  onListNotes: () => void;
+  smokeStatus: string;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 };
@@ -15,6 +17,8 @@ export function Sidebar({
   onSearchChange,
   onNewNote,
   onNewPrompt,
+  onListNotes,
+  smokeStatus,
   theme,
   onToggleTheme,
 }: SidebarProps) {
@@ -55,6 +59,16 @@ export function Sidebar({
             Shell mock content
           </p>
         </div>
+      </div>
+
+      <div className="mt-auto space-y-2 pt-4">
+        <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
+          Dev Smoke
+        </p>
+        <Button variant="ghost" className="w-full justify-start" onClick={onListNotes}>
+          List Notes
+        </Button>
+        <p className="text-[11px] text-[var(--text-tertiary)]">{smokeStatus}</p>
       </div>
     </aside>
   );
