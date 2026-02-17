@@ -1,0 +1,104 @@
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/500.css";
+@import "@fontsource/source-serif-4/600.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #f5f4ef;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #faf9f6;
+  --bg-sidebar: #eeedea;
+  --bg-block: #f9f8f5;
+
+  --text-primary: #1c1b18;
+  --text-secondary: #6b6860;
+  --text-tertiary: #9c9890;
+
+  --accent: #bf5b3a;
+  --accent-hover: #a84e30;
+  --accent-subtle: #bf5b3a15;
+
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.15);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+
+  --font-content: "Source Serif 4", Georgia, Cambria, serif;
+  --font-ui: system-ui, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", "Fira Code", monospace;
+
+  --font-size-body: 16px;
+  --font-size-ui: 13px;
+  --font-size-mono: 14px;
+  --font-size-label: 11px;
+  --line-height-body: 1.65;
+
+  --radius-card: 10px;
+  --radius-button: 6px;
+  --radius-block: 8px;
+  --radius-input: 6px;
+
+  --sidebar-width: 260px;
+  --editor-max-width: 720px;
+  --editor-padding-x: 48px;
+  --editor-padding-top: 40px;
+  --status-height: 32px;
+
+  --motion-duration: 200ms;
+  --motion-ease: ease;
+  --motion-sidebar: 250ms ease-in-out;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1917;
+  --bg-surface: #242320;
+  --bg-surface-hover: #2a2926;
+  --bg-sidebar: #1e1d1a;
+  --bg-block: #2a2926;
+
+  --text-primary: #e8e6e0;
+  --text-secondary: #9c9890;
+  --text-tertiary: #6b6860;
+
+  --accent: #d4714e;
+  --accent-hover: #e07e58;
+  --accent-subtle: #d4714e18;
+
+  --border-default: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-ui);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease);
+}
