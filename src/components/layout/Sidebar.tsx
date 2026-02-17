@@ -1,13 +1,16 @@
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import type { Note } from "../../lib/tauri";
 
 type SidebarProps = {
   searchValue: string;
   onSearchChange: (value: string) => void;
   onNewNote: () => void;
   onNewPrompt: () => void;
-  onListNotes: () => void;
-  smokeStatus: string;
+  notes: Note[];
+  activeNoteId: string | null;
+  onSelectNote: (id: string) => void;
+  isLoading: boolean;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 };
@@ -17,8 +20,10 @@ export function Sidebar({
   onSearchChange,
   onNewNote,
   onNewPrompt,
-  onListNotes,
-  smokeStatus,
+  notes,
+  activeNoteId,
+  onSelectNote,
+  isLoading,
   theme,
   onToggleTheme,
 }: SidebarProps) {
@@ -47,28 +52,46 @@ export function Sidebar({
         </Button>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 flex min-h-0 flex-1 flex-col space-y-3">
         <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
-          Recent
+          Notes
         </p>
-        <div className="rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)]">
-          <p className="text-[var(--font-size-ui)] text-[var(--text-primary)]">
-            Welcome note
-          </p>
-          <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
-            Shell mock content
-          </p>
-        </div>
-      </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {isLoading ? (
+            <p className="px-1 text-[11px] text-[var(--text-tertiary)]">Loading notes...</p>
+          ) : null}
 
-      <div className="mt-auto space-y-2 pt-4">
-        <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
-          Dev Smoke
-        </p>
-        <Button variant="ghost" className="w-full justify-start" onClick={onListNotes}>
-          List Notes
-        </Button>
-        <p className="text-[11px] text-[var(--text-tertiary)]">{smokeStatus}</p>
+          {!isLoading && notes.length === 0 ? (
+            <p className="px-1 text-[11px] text-[var(--text-tertiary)]">
+              No notes yet. Create one to get started.
+            </p>
+          ) : null}
+
+          {notes.map((note) => {
+            const isActive = note.id === activeNoteId;
+            return (
+              <button
+                key={note.id}
+                type="button"
+                onClick={() => onSelectNote(note.id)}
+                className={[
+                  "w-full rounded-[var(--radius-card)] border px-3 py-2 text-left",
+                  "transition-colors duration-200 ease-in-out",
+                  isActive
+                    ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
+                    : "border-[var(--border-default)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]",
+                ].join(" ")}
+              >
+                <p className="truncate text-[var(--font-size-ui)] text-[var(--text-primary)]">
+                  {note.title || "Untitled"}
+                </p>
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">
+                  {note.noteType}
+                </p>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </aside>
   );
