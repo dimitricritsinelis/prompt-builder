@@ -9,6 +9,8 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { JSONContent } from "@tiptap/core";
 import { useCallback, useEffect, useMemo } from "react";
+import { PromptBlock, PromptBlockSlashMenu } from "../../extensions/prompt-block";
+import { PROMPT_BLOCKS, type PromptBlockType } from "../../lib/promptBlocks";
 import type { Note } from "../../lib/tauri";
 import { useEditorAutosave } from "../../hooks/useEditorAutosave";
 
@@ -85,6 +87,35 @@ function ToolbarButton({
   );
 }
 
+function InsertBlockSelect({
+  onInsert,
+}: {
+  onInsert: (blockType: PromptBlockType) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[11px] font-medium text-[var(--text-secondary)]">
+      Insert Block
+      <select
+        defaultValue=""
+        onChange={(event) => {
+          const value = event.currentTarget.value as PromptBlockType | "";
+          if (!value) return;
+          onInsert(value);
+          event.currentTarget.value = "";
+        }}
+        className="h-8 rounded-[var(--radius-button)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-[11px] text-[var(--text-primary)]"
+      >
+        <option value="">Select...</option>
+        {PROMPT_BLOCKS.map((block) => (
+          <option key={block.type} value={block.type}>
+            {block.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   const initialDoc = useMemo(() => parseStoredDoc(note.bodyJson), [note.bodyJson]);
   const saveBody = useCallback(
@@ -113,6 +144,8 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
         autolink: true,
         linkOnPaste: true,
       }),
+      PromptBlock,
+      PromptBlockSlashMenu,
       TaskList,
       TaskItem.configure({
         nested: true,
@@ -122,6 +155,7 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
           if (node.type.name === "heading") return "Heading";
           if (node.type.name === "codeBlock") return "Write code...";
           if (node.type.name === "taskItem") return "Task";
+          if (node.type.name === "promptBlock") return "Write block content...";
           return "Start writing your note...";
         },
       }),
@@ -212,6 +246,11 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
             }
 
             editor.chain().focus().setLink({ href }).run();
+          }}
+        />
+        <InsertBlockSelect
+          onInsert={(blockType) => {
+            editor.chain().focus().insertPromptBlock(blockType).run();
           }}
         />
       </div>
