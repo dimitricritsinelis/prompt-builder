@@ -8,12 +8,19 @@ type UseNotesResult = {
   activeNoteId: string | null;
   searchQuery: string;
   isLoading: boolean;
+  saveState: "idle" | "saving" | "saved" | "error";
   error: string | null;
   createFreeformNote: () => Promise<void>;
   createPromptNote: () => Promise<void>;
   setActiveNote: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   updateTitle: (title: string) => Promise<void>;
+  saveBody: (
+    id: string,
+    title: string,
+    bodyJson: string,
+    bodyText: string,
+  ) => Promise<void>;
 };
 
 export function useNotes(): UseNotesResult {
@@ -25,6 +32,7 @@ export function useNotes(): UseNotesResult {
     searchQuery,
     hasLoaded,
     isLoading,
+    saveState,
     error,
     loadNotes,
     searchNotes,
@@ -32,6 +40,7 @@ export function useNotes(): UseNotesResult {
     setActiveNote,
     setSearchQuery,
     updateTitle,
+    saveBody,
   } = useNoteStore();
 
   useEffect(() => {
@@ -64,11 +73,13 @@ export function useNotes(): UseNotesResult {
     activeNoteId,
     searchQuery,
     isLoading,
+    saveState,
     error,
     createFreeformNote: () => createNote("freeform"),
     createPromptNote: () => createNote("prompt"),
     setActiveNote,
     setSearchQuery,
     updateTitle,
+    saveBody,
   };
 }

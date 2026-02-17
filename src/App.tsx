@@ -14,23 +14,35 @@ function App() {
     activeNoteId,
     searchQuery,
     isLoading,
+    saveState,
     error,
     createFreeformNote,
     createPromptNote,
     setActiveNote,
     setSearchQuery,
     updateTitle,
+    saveBody,
   } = useNotes();
+  const [editorWordCount, setEditorWordCount] = useState(0);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  const wordCount = activeNote?.bodyText.trim()
-    ? activeNote.bodyText.trim().split(/\s+/).length
-    : 0;
-  const charCount = activeNote?.bodyText.length ?? 0;
-  const saveState = error ? `Error: ${error}` : isLoading ? "Loading..." : "Ready";
+  useEffect(() => {
+    const bodyText = activeNote?.bodyText.trim() ?? "";
+    setEditorWordCount(bodyText ? bodyText.split(/\s+/).length : 0);
+  }, [activeNote?.id, activeNote?.bodyText]);
+
+  const saveLabel = error
+    ? `Error: ${error}`
+    : saveState === "saving"
+      ? "Saving..."
+      : saveState === "saved"
+        ? "Saved"
+        : isLoading
+          ? "Loading..."
+          : "Ready";
 
   return (
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
@@ -60,13 +72,14 @@ function App() {
           onUpdateTitle={async (title) => {
             await updateTitle(title);
           }}
+          onSaveBody={async (id, title, bodyJson, bodyText) => {
+            await saveBody(id, title, bodyJson, bodyText);
+          }}
+          onStatsChange={(wordCount) => {
+            setEditorWordCount(wordCount);
+          }}
         />
-        <StatusBar
-          saveState={saveState}
-          noteCount={notes.length}
-          wordCount={wordCount}
-          charCount={charCount}
-        />
+        <StatusBar saveState={saveLabel} wordCount={editorWordCount} noteType={activeNote?.noteType ?? null} />
       </section>
     </div>
   );

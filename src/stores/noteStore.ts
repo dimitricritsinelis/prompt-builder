@@ -16,6 +16,7 @@ type NoteStoreState = {
   searchQuery: string;
   hasLoaded: boolean;
   isLoading: boolean;
+  saveState: "idle" | "saving" | "saved" | "error";
   error: string | null;
   loadNotes: () => Promise<void>;
   searchNotes: (query: string) => Promise<void>;
@@ -23,6 +24,12 @@ type NoteStoreState = {
   setActiveNote: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   updateTitle: (title: string) => Promise<void>;
+  saveBody: (
+    id: string,
+    title: string,
+    bodyJson: string,
+    bodyText: string,
+  ) => Promise<void>;
 };
 
 function sortNotes(notes: Note[]): Note[] {
@@ -41,6 +48,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
   searchQuery: "",
   hasLoaded: false,
   isLoading: false,
+  saveState: "idle",
   error: null,
 
   async loadNotes() {
@@ -60,6 +68,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
           ? notes.find((note) => note.id === nextActiveId) ?? null
           : null,
         hasLoaded: true,
+        saveState: "saved",
       });
     } catch (error) {
       set({ error: String(error) });
@@ -90,6 +99,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
         activeNote: nextActiveId
           ? notes.find((note) => note.id === nextActiveId) ?? null
           : null,
+        saveState: "saved",
       });
     } catch (error) {
       set({ error: String(error) });
@@ -108,6 +118,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
         activeNoteId: created.id,
         activeNote: created,
         searchQuery: "",
+        saveState: "saved",
       });
     } catch (error) {
       set({ error: String(error) });
@@ -120,7 +131,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const note = await noteGet(id);
-      set({ activeNoteId: note.id, activeNote: note });
+      set({ activeNoteId: note.id, activeNote: note, saveState: "saved" });
     } catch (error) {
       set({ error: String(error) });
     } finally {
@@ -139,7 +150,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
     const nextTitle = title.trim() || "Untitled";
     if (nextTitle === active.title) return;
 
-    set({ error: null });
+    set({ error: null, saveState: "saving" });
     try {
       const updated = await noteUpdate({
         id: active.id,
@@ -150,12 +161,41 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
 
       set((state) => ({
         activeNote: updated,
+        saveState: "saved",
         notes: sortNotes(
           state.notes.map((note) => (note.id === updated.id ? updated : note)),
         ),
       }));
     } catch (error) {
-      set({ error: String(error) });
+      set({ error: String(error), saveState: "error" });
+    }
+  },
+
+  async saveBody(id, title, bodyJson, bodyText) {
+    const existing = get().notes.find((note) => note.id === id);
+    if (existing && existing.bodyJson === bodyJson && existing.bodyText === bodyText) return;
+
+    set({ error: null, saveState: "saving" });
+    try {
+      const updated = await noteUpdate({
+        id,
+        title,
+        bodyJson,
+        bodyText,
+      });
+
+      set((state) => ({
+        activeNote:
+          state.activeNote && state.activeNote.id === updated.id
+            ? updated
+            : state.activeNote,
+        saveState: "saved",
+        notes: sortNotes(
+          state.notes.map((note) => (note.id === updated.id ? updated : note)),
+        ),
+      }));
+    } catch (error) {
+      set({ error: String(error), saveState: "error" });
     }
   },
 }));

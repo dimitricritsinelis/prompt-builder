@@ -1,29 +1,58 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Editor } from "../editor/Editor";
 import type { Note } from "../../lib/tauri";
 import { Input } from "../ui/Input";
 
 type EditorPaneProps = {
   activeNote: Note | null;
   onUpdateTitle: (title: string) => Promise<void>;
+  onSaveBody: (
+    id: string,
+    title: string,
+    bodyJson: string,
+    bodyText: string,
+  ) => Promise<void>;
+  onStatsChange: (wordCount: number) => void;
 };
 
-export function EditorPane({ activeNote, onUpdateTitle }: EditorPaneProps) {
+export function EditorPane({
+  activeNote,
+  onUpdateTitle,
+  onSaveBody,
+  onStatsChange,
+}: EditorPaneProps) {
   const [titleValue, setTitleValue] = useState(activeNote?.title ?? "");
+  const titleTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setTitleValue(activeNote?.title ?? "");
   }, [activeNote?.id, activeNote?.title]);
 
+  const flushTitleSave = useCallback(async () => {
+    if (!activeNote) return;
+    const nextTitle = titleValue.trim() || "Untitled";
+    if (nextTitle === activeNote.title) return;
+    await onUpdateTitle(nextTitle);
+  }, [activeNote, onUpdateTitle, titleValue]);
+
   useEffect(() => {
     if (!activeNote) return;
-    if (titleValue === activeNote.title) return;
+    if (titleValue.trim() === (activeNote.title || "").trim()) return;
 
-    const timeoutId = window.setTimeout(() => {
-      void onUpdateTitle(titleValue);
-    }, 300);
+    if (titleTimeoutRef.current) {
+      window.clearTimeout(titleTimeoutRef.current);
+    }
 
-    return () => window.clearTimeout(timeoutId);
-  }, [activeNote, onUpdateTitle, titleValue]);
+    titleTimeoutRef.current = window.setTimeout(() => {
+      void flushTitleSave();
+    }, 1000);
+
+    return () => {
+      if (titleTimeoutRef.current) {
+        window.clearTimeout(titleTimeoutRef.current);
+      }
+    };
+  }, [activeNote, flushTitleSave, titleValue]);
 
   return (
     <main className="min-w-0 flex-1 overflow-auto bg-[var(--bg-primary)]">
@@ -37,28 +66,32 @@ export function EditorPane({ activeNote, onUpdateTitle }: EditorPaneProps) {
               <Input
                 value={titleValue}
                 onChange={(event) => setTitleValue(event.currentTarget.value)}
+                onBlur={() => {
+                  void flushTitleSave();
+                }}
                 placeholder="Untitled"
                 className="h-auto border-none bg-transparent px-0 py-0 text-3xl font-semibold leading-tight shadow-none focus:ring-0"
               />
             </div>
           </header>
 
-          <p>
-            {activeNote
-              ? "Active note loaded from SQLite-backed Tauri commands."
-              : "Select or create a note to start writing."}
-          </p>
-
-          <section className="editor-placeholder-block">
-            <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
-              Body Placeholder
-            </p>
-            <p className="mt-2">
-              {activeNote?.bodyText || "Note body wiring comes next."}
-            </p>
-          </section>
-
-          <p>{activeNote ? `ID: ${activeNote.id}` : "No active note selected."}</p>
+          {activeNote ? (
+            <Editor
+              key={activeNote.id}
+              note={activeNote}
+              onSaveBody={onSaveBody}
+              onStatsChange={onStatsChange}
+            />
+          ) : (
+            <section className="editor-placeholder-block">
+              <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
+                No Active Note
+              </p>
+              <p className="mt-2">
+                Select a note from the sidebar or create one to start writing.
+              </p>
+            </section>
+          )}
         </article>
       </div>
     </main>
