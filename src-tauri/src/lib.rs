@@ -6,7 +6,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let db = db::Db::from_app(&app.handle())?;
+            let db = db::Db::from_app(app.handle())?;
             app.manage(db);
             Ok(())
         })
