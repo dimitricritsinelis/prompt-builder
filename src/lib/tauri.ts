@@ -38,6 +38,10 @@ export async function noteDelete(id: string): Promise<void> {
   return invoke<void>("note_delete", { id });
 }
 
+export async function noteRestore(id: string): Promise<void> {
+  return invoke<void>("note_restore", { id });
+}
+
 export async function noteDeletePermanent(id: string): Promise<void> {
   return invoke<void>("note_delete_permanent", { id });
 }
