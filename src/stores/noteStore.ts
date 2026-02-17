@@ -8,6 +8,7 @@ import {
   noteSearch,
   noteUpdate,
 } from "../lib/tauri";
+import { promptTemplateDoc, promptTemplateText } from "../lib/promptBlocks";
 
 type NoteStoreState = {
   notes: Note[];
@@ -111,7 +112,16 @@ export const useNoteStore = create<NoteStoreState>((set, get) => ({
   async createNote(noteType) {
     set({ isLoading: true, error: null });
     try {
-      const created = await noteCreate(noteType);
+      let created = await noteCreate(noteType);
+      if (noteType === "prompt") {
+        created = await noteUpdate({
+          id: created.id,
+          title: created.title,
+          bodyJson: JSON.stringify(promptTemplateDoc()),
+          bodyText: promptTemplateText(),
+        });
+      }
+
       const notes = sortNotes([created, ...get().notes.filter((n) => n.id !== created.id)]);
       set({
         notes,
