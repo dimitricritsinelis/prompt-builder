@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "../editor/Editor";
+import type { EditorStats } from "../../lib/editorStats";
 import type { Note } from "../../lib/tauri";
 import { Input } from "../ui/Input";
 
@@ -12,7 +13,7 @@ type EditorPaneProps = {
     bodyJson: string,
     bodyText: string,
   ) => Promise<void>;
-  onStatsChange: (wordCount: number) => void;
+  onStatsChange: (stats: EditorStats) => void;
 };
 
 export function EditorPane({
@@ -21,6 +22,7 @@ export function EditorPane({
   onSaveBody,
   onStatsChange,
 }: EditorPaneProps) {
+  const fallbackTitle = activeNote?.noteType === "prompt" ? "Prompt" : "Note";
   const [titleValue, setTitleValue] = useState(activeNote?.title ?? "");
   const titleTimeoutRef = useRef<number | null>(null);
 
@@ -30,10 +32,10 @@ export function EditorPane({
 
   const flushTitleSave = useCallback(async () => {
     if (!activeNote) return;
-    const nextTitle = titleValue.trim() || "Untitled";
+    const nextTitle = titleValue.trim() || fallbackTitle;
     if (nextTitle === activeNote.title) return;
     await onUpdateTitle(nextTitle);
-  }, [activeNote, onUpdateTitle, titleValue]);
+  }, [activeNote, fallbackTitle, onUpdateTitle, titleValue]);
 
   useEffect(() => {
     if (!activeNote) return;
@@ -55,7 +57,7 @@ export function EditorPane({
   }, [activeNote, flushTitleSave, titleValue]);
 
   return (
-    <main className="min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)]">
+    <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)]">
       <div className="h-full px-6 pb-4 pt-4">
         <article className="editor-pane-content flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-md)]">
           <header>
@@ -66,7 +68,7 @@ export function EditorPane({
                 onBlur={() => {
                   void flushTitleSave();
                 }}
-                placeholder="Untitled"
+                placeholder={fallbackTitle}
                 className="h-auto border-none bg-transparent px-0 py-0 text-4xl font-semibold leading-tight shadow-none focus:ring-0"
               />
             </div>

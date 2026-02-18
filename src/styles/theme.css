@@ -12,6 +12,14 @@
   --bg-surface-hover: #faf9f6;
   --bg-sidebar: #eeedea;
   --bg-block: #f9f8f5;
+  --toolbar-bg: #eff1f3;
+  --toolbar-border: #dde1e5;
+  --toolbar-separator: rgba(25, 30, 40, 0.16);
+  --toolbar-icon: #5f6672;
+  --toolbar-control-hover: #e4e8ed;
+  --toolbar-pill-bg: #e7ebf0;
+  --toolbar-pill-accent-bg: #ede9ff;
+  --toolbar-pill-accent-text: #5f48d6;
 
   --text-primary: #1c1b18;
   --text-secondary: #6b6860;
@@ -61,6 +69,14 @@
   --bg-surface-hover: #2a2926;
   --bg-sidebar: #1e1d1a;
   --bg-block: #2a2926;
+  --toolbar-bg: #2b2d33;
+  --toolbar-border: #383b44;
+  --toolbar-separator: rgba(255, 255, 255, 0.16);
+  --toolbar-icon: #b8bfcc;
+  --toolbar-control-hover: #363943;
+  --toolbar-pill-bg: #333742;
+  --toolbar-pill-accent-bg: #3f3a56;
+  --toolbar-pill-accent-text: #c7bbff;
 
   --text-primary: #e8e6e0;
   --text-secondary: #9c9890;
@@ -76,6 +92,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+
 }
 
 *,
@@ -88,6 +105,7 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {

@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorPane } from "./components/layout/EditorPane";
 import { ContextVaultPanel } from "./components/layout/ContextVaultPanel";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
+import { PanelToggleButton } from "./components/ui/PanelToggleButton";
+import type { EditorStats } from "./lib/editorStats";
+import type {
+  OpenAITokenizeRequest,
+  OpenAITokenizeResponse,
+  TokenMode,
+} from "./lib/openaiTokenWorker";
 import type { Note } from "./lib/tauri";
+import { countWords, estimateOpenAITokens } from "./lib/tokenCount";
 import { useNotes } from "./hooks/useNotes";
 
 type Theme = "light" | "dark";
@@ -14,6 +22,9 @@ type UndoToast = {
 };
 
 const THEME_STORAGE_KEY = "promptpad-theme";
+const LEFT_PANEL_STORAGE_KEY = "promptpad-left-panel-open";
+const RIGHT_PANEL_STORAGE_KEY = "promptpad-right-panel-open";
+const TOKEN_MODE_STORAGE_KEY = "promptpad:token-mode";
 
 function getInitialTheme(): Theme {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -26,12 +37,37 @@ function getInitialTheme(): Theme {
     : "light";
 }
 
+function getInitialPanelState(storageKey: string): boolean {
+  const stored = window.localStorage.getItem(storageKey);
+  if (stored === "true") return true;
+  if (stored === "false") return false;
+  return true;
+}
+
+function getInitialTokenMode(): TokenMode {
+  const stored = window.localStorage.getItem(TOKEN_MODE_STORAGE_KEY);
+  return stored === "exact" ? "exact" : "estimate";
+}
+
 function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [tokenMode, setTokenMode] = useState<TokenMode>(getInitialTokenMode);
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState<boolean>(() =>
+    getInitialPanelState(LEFT_PANEL_STORAGE_KEY),
+  );
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState<boolean>(() =>
+    getInitialPanelState(RIGHT_PANEL_STORAGE_KEY),
+  );
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
   const [hintToast, setHintToast] = useState<string | null>(null);
   const undoTimeoutRef = useRef<number | null>(null);
   const hintTimeoutRef = useRef<number | null>(null);
+  const tokenizeWorkerRef = useRef<Worker | null>(null);
+  const tokenDebounceRef = useRef<number | null>(null);
+  const tokenModeRef = useRef<TokenMode>(tokenMode);
+  const tokenizeRequestIdRef = useRef(0);
+  const [exactTokenCount, setExactTokenCount] = useState<number | null>(null);
+  const [isExactTokenizerAvailable, setIsExactTokenizerAvailable] = useState(true);
   const {
     notes,
     activeNote,
@@ -51,6 +87,11 @@ function App() {
     restoreNote,
   } = useNotes();
   const [editorWordCount, setEditorWordCount] = useState(0);
+  const [editorBodyText, setEditorBodyText] = useState("");
+  const estimatedTokenCount = useMemo(
+    () => estimateOpenAITokens(editorBodyText),
+    [editorBodyText],
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -58,9 +99,102 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    const bodyText = activeNote?.bodyText.trim() ?? "";
-    setEditorWordCount(bodyText ? bodyText.split(/\s+/).length : 0);
+    tokenModeRef.current = tokenMode;
+    window.localStorage.setItem(TOKEN_MODE_STORAGE_KEY, tokenMode);
+  }, [tokenMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LEFT_PANEL_STORAGE_KEY, String(isLeftPanelOpen));
+  }, [isLeftPanelOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(isRightPanelOpen));
+  }, [isRightPanelOpen]);
+
+  useEffect(() => {
+    const bodyText = activeNote?.bodyText ?? "";
+    setEditorBodyText(bodyText);
+    setEditorWordCount(countWords(bodyText));
+    setExactTokenCount(null);
   }, [activeNote?.id, activeNote?.bodyText]);
+
+  useEffect(() => {
+    if (typeof Worker === "undefined") {
+      setIsExactTokenizerAvailable(false);
+      return;
+    }
+
+    const worker = new Worker(new URL("./workers/openaiTokenize.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    tokenizeWorkerRef.current = worker;
+
+    worker.onmessage = (event: MessageEvent<OpenAITokenizeResponse>) => {
+      const message = event.data;
+      if (message.id !== tokenizeRequestIdRef.current) {
+        return;
+      }
+
+      if ("error" in message) {
+        setIsExactTokenizerAvailable(false);
+        setExactTokenCount(null);
+        return;
+      }
+
+      if (tokenModeRef.current === "exact") {
+        setExactTokenCount(message.tokenCount);
+      }
+    };
+
+    worker.onerror = () => {
+      setIsExactTokenizerAvailable(false);
+      setExactTokenCount(null);
+    };
+
+    return () => {
+      if (tokenDebounceRef.current) {
+        window.clearTimeout(tokenDebounceRef.current);
+        tokenDebounceRef.current = null;
+      }
+      worker.terminate();
+      tokenizeWorkerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tokenDebounceRef.current) {
+      window.clearTimeout(tokenDebounceRef.current);
+      tokenDebounceRef.current = null;
+    }
+
+    if (tokenMode !== "exact") {
+      return;
+    }
+
+    if (!isExactTokenizerAvailable || !tokenizeWorkerRef.current) {
+      return;
+    }
+
+    const requestId = tokenizeRequestIdRef.current + 1;
+    tokenizeRequestIdRef.current = requestId;
+    setExactTokenCount(null);
+
+    tokenDebounceRef.current = window.setTimeout(() => {
+      const request: OpenAITokenizeRequest = {
+        id: requestId,
+        text: editorBodyText,
+        encoding: "o200k_base",
+      };
+      tokenizeWorkerRef.current?.postMessage(request);
+    }, 320);
+
+    return () => {
+      if (tokenDebounceRef.current) {
+        window.clearTimeout(tokenDebounceRef.current);
+        tokenDebounceRef.current = null;
+      }
+    };
+  }, [activeNote?.id, editorBodyText, isExactTokenizerAvailable, tokenMode]);
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -130,6 +264,9 @@ function App() {
       if (hintTimeoutRef.current) {
         window.clearTimeout(hintTimeoutRef.current);
       }
+      if (tokenDebounceRef.current) {
+        window.clearTimeout(tokenDebounceRef.current);
+      }
     };
   }, []);
 
@@ -189,40 +326,59 @@ function App() {
     [saveBody],
   );
 
-  const handleStatsChange = useCallback((wordCount: number) => {
-    setEditorWordCount(wordCount);
+  const handleStatsChange = useCallback((stats: EditorStats) => {
+    setEditorWordCount(stats.wordCount);
+    setEditorBodyText(stats.bodyText);
+  }, []);
+
+  const handleToggleTokenMode = useCallback(() => {
+    setTokenMode((previous) => (previous === "estimate" ? "exact" : "estimate"));
   }, []);
 
   return (
-    <div className="relative flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
-      <Sidebar
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        onNewNote={() => {
-          void createFreeformNote();
-        }}
-        onNewPrompt={() => {
-          void createPromptNote();
-        }}
-        notes={notes}
-        activeNoteId={activeNoteId}
-        onSelectNote={(id) => {
-          void setActiveNote(id);
-        }}
-        onPinToggle={(id, pinned) => {
-          void pinNote(id, pinned);
-        }}
-        onTrash={(note) => {
-          void handleTrash(note);
-        }}
-        isLoading={isLoading}
-        theme={theme}
-        onToggleTheme={() =>
-          setTheme((previous) => (previous === "light" ? "dark" : "light"))
-        }
-      />
-      <div className="flex min-w-0 flex-1">
-        <section className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex h-dvh min-h-0 overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      {isLeftPanelOpen ? (
+        <Sidebar
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onNewNote={() => {
+            void createFreeformNote();
+          }}
+          onNewPrompt={() => {
+            void createPromptNote();
+          }}
+          notes={notes}
+          activeNoteId={activeNoteId}
+          onSelectNote={(id) => {
+            void setActiveNote(id);
+          }}
+          onPinToggle={(id, pinned) => {
+            void pinNote(id, pinned);
+          }}
+          onTrash={(note) => {
+            void handleTrash(note);
+          }}
+          isLoading={isLoading}
+          theme={theme}
+          onToggleTheme={() =>
+            setTheme((previous) => (previous === "light" ? "dark" : "light"))
+          }
+          onToggleCollapse={() => setIsLeftPanelOpen(false)}
+        />
+      ) : null}
+      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {!isLeftPanelOpen ? (
+          <PanelToggleButton
+            panel="left"
+            onClick={() => setIsLeftPanelOpen(true)}
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            tooltipLabel="Toggle sidebar"
+            wrapperClassName="absolute left-3 top-4 z-30"
+          />
+        ) : null}
+
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <EditorPane
             activeNote={activeNote}
             onUpdateTitle={handleUpdateTitle}
@@ -232,10 +388,26 @@ function App() {
           <StatusBar
             saveState={saveLabel}
             wordCount={editorWordCount}
-            noteType={activeNote?.noteType ?? null}
+            tokenMode={tokenMode}
+            estimatedTokens={estimatedTokenCount}
+            exactTokens={isExactTokenizerAvailable ? exactTokenCount : null}
+            onToggleTokenMode={handleToggleTokenMode}
           />
         </section>
-        <ContextVaultPanel />
+
+        {isRightPanelOpen ? (
+          <ContextVaultPanel onToggleCollapse={() => setIsRightPanelOpen(false)} />
+        ) : (
+          <PanelToggleButton
+            panel="right"
+            onClick={() => setIsRightPanelOpen(true)}
+            wrapperClassName="absolute right-3 top-4 z-30"
+            className="h-8 w-8 rounded-[12px]"
+            aria-label="Expand context vault"
+            title="Expand context vault"
+            tooltipLabel="Toggle context vault"
+          />
+        )}
       </div>
 
       {undoToast ? (

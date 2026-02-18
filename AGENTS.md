@@ -42,7 +42,7 @@ Key docs:
 - `pnpm install`
 
 ### Run desktop app (Tauri)
-- `pnpm tauri dev`
+- `pnpm prompt`
 
 ### Run web-only (optional, if configured)
 - `pnpm dev`
