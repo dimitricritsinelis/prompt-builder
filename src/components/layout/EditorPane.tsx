@@ -55,14 +55,11 @@ export function EditorPane({
   }, [activeNote, flushTitleSave, titleValue]);
 
   return (
-    <main className="min-w-0 flex-1 overflow-auto bg-[var(--bg-primary)]">
-      <div className="mx-auto w-full max-w-[var(--editor-max-width)] px-[var(--editor-padding-x)] pb-20 pt-[var(--editor-padding-top)]">
-        <article className="editor-pane-content space-y-6 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-8 shadow-[var(--shadow-md)]">
+    <main className="min-w-0 flex-1 overflow-hidden bg-[var(--bg-primary)]">
+      <div className="h-full px-6 pb-4 pt-4">
+        <article className="editor-pane-content flex h-full min-h-0 flex-col rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-md)]">
           <header>
-            <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
-              {activeNote ? activeNote.noteType : "Draft"}
-            </p>
-            <div className="mt-2">
+            <div>
               <Input
                 value={titleValue}
                 onChange={(event) => setTitleValue(event.currentTarget.value)}
@@ -70,20 +67,22 @@ export function EditorPane({
                   void flushTitleSave();
                 }}
                 placeholder="Untitled"
-                className="h-auto border-none bg-transparent px-0 py-0 text-3xl font-semibold leading-tight shadow-none focus:ring-0"
+                className="h-auto border-none bg-transparent px-0 py-0 text-4xl font-semibold leading-tight shadow-none focus:ring-0"
               />
             </div>
           </header>
 
           {activeNote ? (
-            <Editor
-              key={activeNote.id}
-              note={activeNote}
-              onSaveBody={onSaveBody}
-              onStatsChange={onStatsChange}
-            />
+            <div className="mt-4 min-h-0 flex-1">
+              <Editor
+                key={activeNote.id}
+                note={activeNote}
+                onSaveBody={onSaveBody}
+                onStatsChange={onStatsChange}
+              />
+            </div>
           ) : (
-            <section className="editor-placeholder-block">
+            <section className="editor-placeholder-block mt-4">
               <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
                 No Active Note
               </p>

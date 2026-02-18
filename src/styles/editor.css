@@ -28,6 +28,7 @@
   font-family: var(--font-content);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+  overflow-y: auto;
 }
 
 .tiptap:focus {

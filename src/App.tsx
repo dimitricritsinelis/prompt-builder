@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorPane } from "./components/layout/EditorPane";
+import { ContextVaultPanel } from "./components/layout/ContextVaultPanel";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import type { Note } from "./lib/tauri";
@@ -220,19 +221,22 @@ function App() {
           setTheme((previous) => (previous === "light" ? "dark" : "light"))
         }
       />
-      <section className="flex min-w-0 flex-1 flex-col">
-        <EditorPane
-          activeNote={activeNote}
-          onUpdateTitle={handleUpdateTitle}
-          onSaveBody={handleSaveBody}
-          onStatsChange={handleStatsChange}
-        />
-        <StatusBar
-          saveState={saveLabel}
-          wordCount={editorWordCount}
-          noteType={activeNote?.noteType ?? null}
-        />
-      </section>
+      <div className="flex min-w-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col">
+          <EditorPane
+            activeNote={activeNote}
+            onUpdateTitle={handleUpdateTitle}
+            onSaveBody={handleSaveBody}
+            onStatsChange={handleStatsChange}
+          />
+          <StatusBar
+            saveState={saveLabel}
+            wordCount={editorWordCount}
+            noteType={activeNote?.noteType ?? null}
+          />
+        </section>
+        <ContextVaultPanel />
+      </div>
 
       {undoToast ? (
         <div className="absolute bottom-10 right-4 z-50 flex items-center gap-3 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 shadow-[var(--shadow-md)]">
