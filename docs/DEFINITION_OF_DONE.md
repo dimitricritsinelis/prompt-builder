@@ -2,7 +2,7 @@
 
 A PR is “done” when:
 - It matches `docs/PRODUCT_SPEC.md` and does not regress UI tokens
-- Desktop app builds and runs via `pnpm tauri dev`
+- Desktop app builds and runs via `pnpm prompt`
 - Automated checks pass:
   - frontend lint + tests (if present)
   - rust fmt/clippy/tests (if present)

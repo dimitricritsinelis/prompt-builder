@@ -39,6 +39,10 @@ type NoteStoreState = {
   restoreNote: (id: string) => Promise<void>;
 };
 
+function defaultTitleForType(noteType: NoteType): string {
+  return noteType === "prompt" ? "Prompt" : "Note";
+}
+
 function sortNotes(notes: Note[]): Note[] {
   return [...notes].sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
@@ -149,14 +153,14 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
       set({ isLoading: true, error: null });
       try {
         let created = await noteCreate(noteType);
-        if (noteType === "prompt") {
-          created = await noteUpdate({
-            id: created.id,
-            title: created.title,
-            bodyJson: JSON.stringify(promptTemplateDoc()),
-            bodyText: promptTemplateText(),
-          });
-        }
+        const baseTitle = defaultTitleForType(noteType);
+        created = await noteUpdate({
+          id: created.id,
+          title: baseTitle,
+          bodyJson:
+            noteType === "prompt" ? JSON.stringify(promptTemplateDoc()) : created.bodyJson,
+          bodyText: noteType === "prompt" ? promptTemplateText() : created.bodyText,
+        });
 
         const notes = sortNotes(await noteList(false));
         set({
@@ -193,7 +197,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
       const active = get().activeNote;
       if (!active) return;
 
-      const nextTitle = title.trim() || "Untitled";
+      const nextTitle = title.trim() || defaultTitleForType(active.noteType);
       if (nextTitle === active.title) return;
 
       set({ error: null, saveState: "saving" });
