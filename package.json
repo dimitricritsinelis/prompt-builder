@@ -4,13 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1 --strictPort",
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "prompt": "tauri dev --no-watch",
+    "prompt": "pnpm prompt:clean && tauri dev --no-watch",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prompt:clean": "pnpm exec kill-port 1420",
+    "verify": "pnpm lint && pnpm test && pnpm build && cargo check --manifest-path src-tauri/Cargo.toml --no-default-features"
   },
   "dependencies": {
     "@dqbd/tiktoken": "^1.0.22",
@@ -26,6 +28,7 @@
     "@tiptap/extension-text-align": "^3.19.0",
     "@tiptap/extension-typography": "^3.19.0",
     "@tiptap/extension-underline": "^3.19.0",
+    "@tiptap/pm": "^3.20.0",
     "@tiptap/react": "^3.19.0",
     "@tiptap/starter-kit": "^3.19.0",
     "@tiptap/suggestion": "^3.19.0",
@@ -43,6 +46,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "kill-port": "^2.0.1"
   }
 }
