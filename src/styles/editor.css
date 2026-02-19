@@ -117,14 +117,14 @@
 .editor-framework-panel-title {
   margin: 0;
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .editor-framework-panel-subtitle {
   margin: 2px 0 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .editor-framework-section-list {
@@ -148,13 +148,21 @@
 .editor-framework-section-line {
   min-width: 0;
   display: block;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.editor-framework-section-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.editor-framework-section-helper {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .editor-framework-actions {

@@ -1003,7 +1003,10 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
                   }}
                 />
                 <span className="editor-framework-section-line">
-                  {formatChecklistLabel(section.label)}: {section.helper}
+                  <span className="editor-framework-section-name">
+                    {formatChecklistLabel(section.label)}:
+                  </span>{" "}
+                  <span className="editor-framework-section-helper">{section.helper}</span>
                 </span>
               </label>
             ))}

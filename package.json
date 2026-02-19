@@ -11,7 +11,7 @@
     "prompt": "pnpm prompt:clean && tauri dev --no-watch",
     "preview": "vite preview",
     "tauri": "tauri",
-    "prompt:clean": "pnpm exec kill-port 1420",
+    "prompt:clean": "pnpm exec kill-port 1420 && pids=$(lsof -t src-tauri/target/debug/.cargo-lock 2>/dev/null || true); if [ -n \"$pids\" ]; then kill -9 $pids; fi; pkill -f 'target/debug/tauri-app' || true",
     "verify": "pnpm lint && pnpm test && pnpm build && cargo check --manifest-path src-tauri/Cargo.toml --no-default-features"
   },
   "dependencies": {
