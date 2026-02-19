@@ -9,6 +9,11 @@ type VaultBucket = {
   placeholder: string;
 };
 
+type ContextInjectItem = {
+  target: "CONTEXT" | "CONSTRAINTS" | "ROLE";
+  text: string;
+};
+
 const PLACEHOLDER_BUCKETS: VaultBucket[] = [
   {
     id: "project-eagle-ford",
@@ -54,6 +59,23 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
     () => Object.values(selected).filter(Boolean).length,
     [selected],
   );
+  const selectedInjectableItems = useMemo(() => {
+    return PLACEHOLDER_BUCKETS.flatMap((bucket) => {
+      if (!selected[bucket.id]) return [];
+      const text = (bucketContent[bucket.id] ?? "").trim();
+      if (!text) return [];
+      return [{ target: bucket.injectTarget, text }];
+    });
+  }, [bucketContent, selected]);
+
+  const emitInjectEvent = (items: ContextInjectItem[]) => {
+    if (items.length === 0) return;
+    window.dispatchEvent(
+      new CustomEvent("promptpad:inject-context", {
+        detail: { items },
+      }),
+    );
+  };
 
   return (
     <aside className="flex min-h-0 w-[var(--context-vault-width)] shrink-0 flex-col overflow-hidden border-l border-[var(--border-default)] bg-[var(--bg-primary)]">
@@ -158,9 +180,18 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
                           <p className="truncate text-[13px] leading-snug text-[var(--text-primary)]">
                             {bucket.title}
                           </p>
-                          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const text = content.trim();
+                              if (!text) return;
+                              emitInjectEvent([{ target: bucket.injectTarget, text }]);
+                            }}
+                            disabled={content.trim().length === 0}
+                            className="mt-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)] transition-colors duration-200 ease-in-out hover:text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-45"
+                          >
                             Inject {"->"} {bucket.injectTarget}
-                          </p>
+                          </button>
                         </div>
 
                         <div className="flex shrink-0 items-center gap-2">
@@ -224,8 +255,16 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
         </section>
       </div>
 
-      <footer className="flex h-[var(--status-height)] items-center border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-4 text-[11px] text-[var(--text-secondary)]">
-        {selectedCount} selected
+      <footer className="flex h-[var(--status-height)] items-center justify-between gap-3 border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-4 text-[11px] text-[var(--text-secondary)]">
+        <span>{selectedCount} selected</span>
+        <button
+          type="button"
+          onClick={() => emitInjectEvent(selectedInjectableItems)}
+          disabled={selectedInjectableItems.length === 0}
+          className="rounded-[var(--radius-button)] border border-[var(--border-default)] px-2 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors duration-200 ease-in-out hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Inject selected
+        </button>
       </footer>
     </aside>
   );

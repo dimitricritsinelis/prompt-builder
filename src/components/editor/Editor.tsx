@@ -6,9 +6,12 @@ import TaskList from "@tiptap/extension-task-list";
 import TextAlign from "@tiptap/extension-text-align";
 import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
+import { Extension, type Editor as TiptapEditor, type JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { Editor as TiptapEditor, JSONContent } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import {
   useCallback,
   useEffect,
@@ -20,10 +23,20 @@ import {
   type ChangeEvent,
 } from "react";
 import { PromptBlock } from "../../extensions/prompt-block";
+import { useEditorAutosave } from "../../hooks/useEditorAutosave";
 import type { EditorStats } from "../../lib/editorStats";
+import {
+  getDefaultSectionKeys,
+  getFrameworkById,
+  INJECT_TARGET_SECTION_KEY,
+  PROMPT_FRAMEWORKS,
+  resolveSectionDefinition,
+  type PromptFrameworkDefinition,
+  type PromptFrameworkId,
+  type PromptSectionKey,
+} from "../../lib/promptFrameworks";
 import type { Note } from "../../lib/tauri";
 import { countWords } from "../../lib/tokenCount";
-import { useEditorAutosave } from "../../hooks/useEditorAutosave";
 
 type EditorProps = {
   note: Note;
@@ -35,6 +48,36 @@ type EditorProps = {
   ) => Promise<void>;
   onStatsChange: (stats: EditorStats) => void;
 };
+
+type HeadingValue = "paragraph" | "h1" | "h2" | "h3";
+type ListValue = "none" | "bullet" | "ordered" | "task";
+type TextAlignValue = "left" | "center" | "right" | "justify";
+type FrameworkSelectValue = "none" | PromptFrameworkId;
+type ApplyMode = "replace" | "insertTop";
+type ContextInjectTarget = keyof typeof INJECT_TARGET_SECTION_KEY;
+type ContextInjectItem = {
+  target: ContextInjectTarget;
+  text: string;
+};
+type ContextInjectEventDetail = {
+  items: ContextInjectItem[];
+};
+
+type SectionSegment = {
+  sectionKey: PromptSectionKey;
+  startIndex: number;
+  endIndex: number;
+  bodyNodes: JSONContent[];
+};
+
+const ZOOM_STEPS = [80, 90, 100, 110, 120, 130] as const;
+
+const ALIGNMENT_OPTIONS: { title: string; value: TextAlignValue }[] = [
+  { title: "Align left", value: "left" },
+  { title: "Align center", value: "center" },
+  { title: "Align right", value: "right" },
+  { title: "Justify", value: "justify" },
+];
 
 function fallbackDoc(): JSONContent {
   return {
@@ -76,19 +119,6 @@ function deriveSavePayload(editor: TiptapEditor): { bodyJson: string; bodyText: 
   };
 }
 
-type HeadingValue = "paragraph" | "h1" | "h2" | "h3";
-type ListValue = "none" | "bullet" | "ordered" | "task";
-type TextAlignValue = "left" | "center" | "right" | "justify";
-
-const ZOOM_STEPS = [80, 90, 100, 110, 120, 130] as const;
-
-const ALIGNMENT_OPTIONS: { title: string; value: TextAlignValue }[] = [
-  { title: "Align left", value: "left" },
-  { title: "Align center", value: "center" },
-  { title: "Align right", value: "right" },
-  { title: "Justify", value: "justify" },
-];
-
 function getNextZoom(current: number, direction: -1 | 1): number {
   const currentIndex = ZOOM_STEPS.indexOf(current as (typeof ZOOM_STEPS)[number]);
   const fallbackIndex = ZOOM_STEPS.indexOf(100);
@@ -109,6 +139,430 @@ function getListValue(editor: TiptapEditor): ListValue {
   if (editor.isActive("bulletList")) return "bullet";
   if (editor.isActive("orderedList")) return "ordered";
   return "none";
+}
+
+function getDocContent(editor: TiptapEditor): JSONContent[] {
+  const doc = editor.getJSON();
+  return Array.isArray(doc.content) ? doc.content : [];
+}
+
+function textFromNode(node: JSONContent | undefined): string {
+  if (!node) return "";
+
+  const ownText = typeof node.text === "string" ? node.text : "";
+  if (!Array.isArray(node.content)) {
+    return ownText;
+  }
+
+  return `${ownText}${node.content.map((child) => textFromNode(child)).join("")}`;
+}
+
+function normalizedText(value: string): string {
+  return value.replace(/\u00A0/g, " ").trim().toLowerCase();
+}
+
+function isParagraphNode(node: JSONContent): boolean {
+  return node.type === "paragraph";
+}
+
+type PromptLineDefinition = {
+  sectionKey: PromptSectionKey;
+  label: string;
+  helper: string;
+  normalizedLabel: string;
+};
+
+const PROMPT_LINE_DEFINITIONS: PromptLineDefinition[] = (() => {
+  const byLabel = new Map<string, PromptLineDefinition>();
+
+  for (const framework of PROMPT_FRAMEWORKS) {
+    for (const section of framework.sections) {
+      const normalizedLabel = normalizedText(section.label);
+      if (byLabel.has(normalizedLabel)) continue;
+      byLabel.set(normalizedLabel, {
+        sectionKey: section.sectionKey,
+        label: section.label,
+        helper: section.helper,
+        normalizedLabel,
+      });
+    }
+  }
+
+  return [...byLabel.values()];
+})();
+
+const PROMPT_LINE_DEFINITIONS_BY_LENGTH = [...PROMPT_LINE_DEFINITIONS].sort(
+  (left, right) => right.label.length - left.label.length,
+);
+
+const DEFAULT_HELPER_BY_LABEL = (() => {
+  const map = new Map<string, string>();
+  for (const definition of PROMPT_LINE_DEFINITIONS) {
+    map.set(definition.label, definition.helper);
+  }
+  return map;
+})();
+
+type MatchedPromptLine = {
+  definition: PromptLineDefinition;
+  leadingWhitespace: number;
+  labelStart: number;
+  labelEnd: number;
+  prefixEnd: number;
+  remainder: string;
+};
+
+function parsePromptLine(text: string): MatchedPromptLine | null {
+  const leadingWhitespace = text.match(/^\s*/)?.[0].length ?? 0;
+  const trimmedStart = text.slice(leadingWhitespace);
+  const normalizedStart = trimmedStart.toLowerCase();
+
+  for (const definition of PROMPT_LINE_DEFINITIONS_BY_LENGTH) {
+    const prefix = `${definition.label.toLowerCase()}:`;
+    if (!normalizedStart.startsWith(prefix)) continue;
+
+    const suffix = trimmedStart.slice(prefix.length);
+    const suffixLeadingWhitespace = suffix.match(/^\s*/)?.[0].length ?? 0;
+    const remainder = suffix.slice(suffixLeadingWhitespace);
+
+    return {
+      definition,
+      leadingWhitespace,
+      labelStart: leadingWhitespace,
+      labelEnd: leadingWhitespace + definition.label.length + 1,
+      prefixEnd: leadingWhitespace + definition.label.length + 1 + suffixLeadingWhitespace,
+      remainder,
+    };
+  }
+
+  return null;
+}
+
+function createPromptLineGhostExtension(
+  getHelperMap: () => Map<string, string>,
+): Extension {
+  return Extension.create({
+    name: "promptLineGhost",
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: new PluginKey("promptLineGhost"),
+          props: {
+            decorations(state: EditorState) {
+              const decorations: Decoration[] = [];
+              const helperMap = getHelperMap();
+
+              state.doc.descendants((node: ProseMirrorNode, position: number) => {
+                if (node.type.name !== "paragraph") return;
+                const paragraphText = node.textContent ?? "";
+                const match = parsePromptLine(paragraphText);
+                if (!match) return;
+
+                const helper = helperMap.get(match.definition.label) ?? match.definition.helper;
+
+                decorations.push(
+                  Decoration.inline(
+                    position + 1 + match.labelStart,
+                    position + 1 + match.labelEnd,
+                    {
+                      class: "prompt-line-label",
+                      title: helper,
+                    },
+                  ),
+                );
+
+                if (helper && match.remainder.trim().length === 0) {
+                  decorations.push(
+                    Decoration.node(
+                      position,
+                      position + node.nodeSize,
+                      {
+                        class: "prompt-line-has-ghost",
+                        "data-prompt-helper": helper,
+                        title: helper,
+                      },
+                    ),
+                  );
+                }
+              });
+
+              return DecorationSet.create(state.doc, decorations);
+            },
+          },
+        }),
+      ];
+    },
+  });
+}
+
+function formatChecklistLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/(^|[\s/])([a-z])/g, (_match, prefix: string, letter: string) => {
+      return `${prefix}${letter.toUpperCase()}`;
+    });
+}
+
+function createSectionLineNode(
+  section: PromptFrameworkDefinition["sections"][number],
+  bodyText = "",
+): JSONContent {
+  const value = bodyText.trim();
+  return {
+    type: "paragraph",
+    content: [
+      {
+        type: "text",
+        text: value.length > 0 ? `${section.label}: ${value}` : `${section.label}: `,
+      },
+    ],
+  };
+}
+
+function rewriteLabelOnLine(
+  node: JSONContent,
+  label: string,
+): JSONContent {
+  const lineText = isParagraphNode(node) ? textFromNode(node) : "";
+  const parsed = parsePromptLine(lineText);
+  const remainder = parsed ? parsed.remainder : lineText.trim();
+  const nextText = remainder.length > 0 ? `${label}: ${remainder}` : `${label}: `;
+
+  return {
+    type: "paragraph",
+    content: [{ type: "text", text: nextText }],
+  };
+}
+
+function sortSectionKeys(
+  framework: PromptFrameworkDefinition,
+  keys: PromptSectionKey[],
+): PromptSectionKey[] {
+  const selected = new Set(keys);
+  return framework.sections
+    .map((section) => section.sectionKey)
+    .filter((sectionKey) => selected.has(sectionKey));
+}
+
+function extractFrameworkSegments(
+  content: JSONContent[],
+  framework: PromptFrameworkDefinition,
+): SectionSegment[] {
+  const frameworkSectionsByLabel = new Map(
+    framework.sections.map((section) => [normalizedText(section.label), section] as const),
+  );
+
+  const segments: SectionSegment[] = [];
+
+  for (let index = 0; index < content.length; index += 1) {
+    const node = content[index];
+    if (!isParagraphNode(node)) continue;
+
+    const parsed = parsePromptLine(textFromNode(node));
+    if (!parsed) continue;
+
+    const section = frameworkSectionsByLabel.get(parsed.definition.normalizedLabel);
+    if (!section) continue;
+
+    let endIndex = index + 1;
+    while (endIndex < content.length) {
+      const candidate = content[endIndex];
+      if (!isParagraphNode(candidate)) {
+        endIndex += 1;
+        continue;
+      }
+
+      const candidateParsed = parsePromptLine(textFromNode(candidate));
+      if (
+        candidateParsed &&
+        frameworkSectionsByLabel.has(candidateParsed.definition.normalizedLabel)
+      ) {
+        break;
+      }
+
+      endIndex += 1;
+    }
+
+    segments.push({
+      sectionKey: section.sectionKey,
+      startIndex: index,
+      endIndex,
+      bodyNodes: content.slice(index, endIndex),
+    });
+
+    index = endIndex - 1;
+  }
+
+  return segments;
+}
+
+function buildFrameworkSectionNodes(
+  framework: PromptFrameworkDefinition,
+  sectionKeys: PromptSectionKey[],
+  existingBodies: Map<PromptSectionKey, JSONContent[]>,
+): JSONContent[] {
+  const selected = new Set(sectionKeys);
+  const nextNodes: JSONContent[] = [];
+
+  for (const section of framework.sections) {
+    if (!selected.has(section.sectionKey)) continue;
+
+    const preservedBody = existingBodies.get(section.sectionKey);
+    if (!preservedBody || preservedBody.length === 0) {
+      nextNodes.push(createSectionLineNode(section));
+      continue;
+    }
+
+    const [first, ...rest] = preservedBody;
+    nextNodes.push(rewriteLabelOnLine(first, section.label), ...rest);
+  }
+
+  return nextNodes;
+}
+
+function applyFrameworkToEditor(
+  editor: TiptapEditor,
+  framework: PromptFrameworkDefinition,
+  sectionKeys: PromptSectionKey[],
+  mode: ApplyMode,
+): void {
+  const sectionNodes = buildFrameworkSectionNodes(framework, sectionKeys, new Map());
+
+  if (mode === "replace") {
+    editor.commands.setContent({
+      type: "doc",
+      content: sectionNodes.length > 0 ? sectionNodes : [{ type: "paragraph" }],
+    });
+    return;
+  }
+
+  const currentContent = getDocContent(editor);
+  editor.commands.setContent({
+    type: "doc",
+    content: [...sectionNodes, ...currentContent],
+  });
+}
+
+function syncFrameworkSectionsInEditor(
+  editor: TiptapEditor,
+  framework: PromptFrameworkDefinition,
+  sectionKeys: PromptSectionKey[],
+): boolean {
+  const content = getDocContent(editor);
+  const segments = extractFrameworkSegments(content, framework);
+
+  const existingBodies = new Map<PromptSectionKey, JSONContent[]>();
+  const usedIndexes = new Set<number>();
+
+  for (const segment of segments) {
+    if (!existingBodies.has(segment.sectionKey)) {
+      existingBodies.set(segment.sectionKey, segment.bodyNodes);
+    }
+
+    for (let index = segment.startIndex; index < segment.endIndex; index += 1) {
+      usedIndexes.add(index);
+    }
+  }
+
+  const selected = new Set(sectionKeys);
+  for (const segment of segments) {
+    if (selected.has(segment.sectionKey)) continue;
+
+    const bodyText = segment.bodyNodes
+      .map((node, index) => {
+        if (index !== 0) return textFromNode(node);
+        const parsed = parsePromptLine(textFromNode(node));
+        return parsed ? parsed.remainder : textFromNode(node);
+      })
+      .join("\n")
+      .trim();
+    if (!bodyText) continue;
+
+    const shouldDelete = window.confirm(
+      `Remove ${segment.sectionKey.replace(/_/g, " ").toUpperCase()} section and delete its content?`,
+    );
+
+    if (!shouldDelete) {
+      return false;
+    }
+  }
+
+  const nextFrameworkNodes = buildFrameworkSectionNodes(framework, sectionKeys, existingBodies);
+  const otherNodes = content.filter((_, index) => !usedIndexes.has(index));
+
+  editor.commands.setContent({
+    type: "doc",
+    content:
+      nextFrameworkNodes.length > 0 || otherNodes.length > 0
+        ? [...nextFrameworkNodes, ...otherNodes]
+        : [{ type: "paragraph" }],
+  });
+
+  return true;
+}
+
+function injectContextIntoSections(editor: TiptapEditor, items: ContextInjectItem[]): void {
+  const entries = items
+    .map((item) => ({
+      target: item.target,
+      text: item.text.trim(),
+    }))
+    .filter((item) => item.text.length > 0);
+
+  if (entries.length === 0) return;
+
+  const content = JSON.parse(JSON.stringify(getDocContent(editor))) as JSONContent[];
+
+  for (const item of entries) {
+    const sectionKey = INJECT_TARGET_SECTION_KEY[item.target];
+    const sectionDefinition = resolveSectionDefinition(sectionKey);
+    const label = sectionDefinition?.label ?? item.target;
+
+    const lineIndex = content.findIndex((node) => {
+      if (!isParagraphNode(node)) return false;
+      const parsed = parsePromptLine(textFromNode(node));
+      return parsed ? normalizedText(parsed.definition.label) === normalizedText(label) : false;
+    });
+
+    if (lineIndex < 0) {
+      content.unshift({
+        type: "paragraph",
+        content: [{ type: "text", text: `${label}: ${item.text}` }],
+      });
+      continue;
+    }
+
+    const parsed = parsePromptLine(textFromNode(content[lineIndex]));
+    if (parsed && parsed.remainder.trim().length === 0) {
+      content[lineIndex] = {
+        type: "paragraph",
+        content: [{ type: "text", text: `${label}: ${item.text}` }],
+      };
+      continue;
+    }
+
+    let insertAt = lineIndex + 1;
+    while (insertAt < content.length) {
+      const candidate = content[insertAt];
+      if (!isParagraphNode(candidate)) {
+        insertAt += 1;
+        continue;
+      }
+      const candidateParsed = parsePromptLine(textFromNode(candidate));
+      if (candidateParsed) break;
+      insertAt += 1;
+    }
+
+    content.splice(insertAt, 0, {
+      type: "paragraph",
+      content: [{ type: "text", text: item.text }],
+    });
+  }
+
+  editor.commands.setContent({
+    type: "doc",
+    content: content.length > 0 ? content : [{ type: "paragraph" }],
+  });
 }
 
 function AlignmentIcon({ value }: { value: TextAlignValue }) {
@@ -165,14 +619,37 @@ function AlignmentIcon({ value }: { value: TextAlignValue }) {
 export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   const initialDoc = useMemo(() => parseStoredDoc(note.bodyJson), [note.bodyJson]);
   const editorRef = useRef<TiptapEditor | null>(null);
+  const helperByLabelRef = useRef<Map<string, string>>(DEFAULT_HELPER_BY_LABEL);
   const [, forceToolbarRender] = useReducer((value: number) => value + 1, 0);
   const [zoomPercent, setZoomPercent] = useState<number>(100);
+  const [selectedFrameworkId, setSelectedFrameworkId] = useState<FrameworkSelectValue>("none");
+  const [selectedSectionKeys, setSelectedSectionKeys] = useState<PromptSectionKey[]>([]);
+  const [isFrameworkPanelOpen, setIsFrameworkPanelOpen] = useState(false);
+  const [hasAppliedFramework, setHasAppliedFramework] = useState(false);
+  const [pendingApply, setPendingApply] = useState<{
+    framework: PromptFrameworkDefinition;
+    sectionKeys: PromptSectionKey[];
+  } | null>(null);
+
+  const selectedFramework = useMemo(
+    () =>
+      selectedFrameworkId === "none"
+        ? null
+        : (getFrameworkById(selectedFrameworkId) ?? null),
+    [selectedFrameworkId],
+  );
+  const promptLineGhostExtension = useMemo(
+    () => createPromptLineGhostExtension(() => helperByLabelRef.current),
+    [],
+  );
+
   const saveBody = useCallback(
     async (bodyJson: string, bodyText: string) => {
       await onSaveBody(note.id, note.title, bodyJson, bodyText);
     },
     [note.id, note.title, onSaveBody],
   );
+
   const { queueSave, flush } = useEditorAutosave({
     noteId: note.id,
     initialBodyJson: note.bodyJson,
@@ -190,6 +667,19 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     onSave: saveBody,
   });
 
+  useEffect(() => {
+    if (!selectedFramework) {
+      helperByLabelRef.current = DEFAULT_HELPER_BY_LABEL;
+      return;
+    }
+
+    const next = new Map(DEFAULT_HELPER_BY_LABEL);
+    for (const section of selectedFramework.sections) {
+      next.set(section.label, section.helper);
+    }
+    helperByLabelRef.current = next;
+  }, [selectedFramework]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -203,6 +693,7 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
         autolink: true,
         linkOnPaste: true,
       }),
+      promptLineGhostExtension,
       PromptBlock,
       TaskList,
       TaskItem.configure({
@@ -254,6 +745,14 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   }, [flush]);
 
   useEffect(() => {
+    setSelectedFrameworkId("none");
+    setSelectedSectionKeys([]);
+    setIsFrameworkPanelOpen(false);
+    setHasAppliedFramework(false);
+    setPendingApply(null);
+  }, [note.id]);
+
+  useEffect(() => {
     const handleForceSave = () => {
       void flush();
     };
@@ -277,6 +776,22 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     return () => {
       editor.off("selectionUpdate", syncToolbarState);
       editor.off("transaction", syncToolbarState);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleContextInject = (event: Event) => {
+      const customEvent = event as CustomEvent<ContextInjectEventDetail>;
+      const detail = customEvent.detail;
+      if (!detail || !Array.isArray(detail.items)) return;
+      injectContextIntoSections(editor, detail.items);
+    };
+
+    window.addEventListener("promptpad:inject-context", handleContextInject as EventListener);
+    return () => {
+      window.removeEventListener("promptpad:inject-context", handleContextInject as EventListener);
     };
   }, [editor]);
 
@@ -334,6 +849,85 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: normalized }).run();
   }, [editor]);
 
+  const handleFrameworkChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.currentTarget.value as FrameworkSelectValue;
+    setSelectedFrameworkId(value);
+
+    if (value === "none") {
+      setSelectedSectionKeys([]);
+      setIsFrameworkPanelOpen(false);
+      setHasAppliedFramework(false);
+      setPendingApply(null);
+      return;
+    }
+
+    setSelectedSectionKeys(getDefaultSectionKeys(value));
+    setIsFrameworkPanelOpen(true);
+    setHasAppliedFramework(false);
+    setPendingApply(null);
+  }, []);
+
+  const handleToggleSection = useCallback(
+    (sectionKey: PromptSectionKey, enabled: boolean) => {
+      if (!selectedFramework || !editor) return;
+
+      const nextKeys = enabled
+        ? [...new Set([...selectedSectionKeys, sectionKey])]
+        : selectedSectionKeys.filter((key) => key !== sectionKey);
+      const ordered = sortSectionKeys(selectedFramework, nextKeys);
+
+      if (hasAppliedFramework) {
+        const synced = syncFrameworkSectionsInEditor(editor, selectedFramework, ordered);
+        if (!synced) return;
+      }
+
+      setSelectedSectionKeys(ordered);
+    },
+    [editor, hasAppliedFramework, selectedFramework, selectedSectionKeys],
+  );
+
+  const handleResetDefaults = useCallback(() => {
+    if (!selectedFramework || !editor) return;
+
+    const defaults = getDefaultSectionKeys(selectedFramework.id);
+    if (hasAppliedFramework) {
+      const synced = syncFrameworkSectionsInEditor(editor, selectedFramework, defaults);
+      if (!synced) return;
+    }
+
+    setSelectedSectionKeys(defaults);
+  }, [editor, hasAppliedFramework, selectedFramework]);
+
+  const handleApply = useCallback(() => {
+    if (!editor || !selectedFramework) return;
+
+    const ordered = sortSectionKeys(selectedFramework, selectedSectionKeys);
+    const hasContent = extractBodyText(editor).length > 0;
+
+    if (!hasContent) {
+      applyFrameworkToEditor(editor, selectedFramework, ordered, "replace");
+      setHasAppliedFramework(true);
+      setIsFrameworkPanelOpen(false);
+      return;
+    }
+
+    setPendingApply({
+      framework: selectedFramework,
+      sectionKeys: ordered,
+    });
+  }, [editor, selectedFramework, selectedSectionKeys]);
+
+  const handleCommitApply = useCallback(
+    (mode: ApplyMode) => {
+      if (!editor || !pendingApply) return;
+      applyFrameworkToEditor(editor, pendingApply.framework, pendingApply.sectionKeys, mode);
+      setHasAppliedFramework(true);
+      setIsFrameworkPanelOpen(false);
+      setPendingApply(null);
+    },
+    [editor, pendingApply],
+  );
+
   const editorScaleStyle = useMemo(
     () =>
       ({
@@ -350,7 +944,94 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   const activeList = getListValue(editor);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="relative flex h-full min-h-0 flex-col gap-3">
+      <div className="editor-framework-row">
+        <div className="editor-framework-controls">
+          <label className="editor-framework-label" htmlFor="framework-select">
+            Framework
+          </label>
+
+          <div className="editor-framework-select-wrap">
+            <select
+              id="framework-select"
+              className="editor-framework-select"
+              value={selectedFrameworkId}
+              onChange={handleFrameworkChange}
+              aria-label="Select prompt framework"
+            >
+              <option value="none">None</option>
+              {PROMPT_FRAMEWORKS.map((framework) => (
+                <option key={framework.id} value={framework.id}>
+                  {framework.label}
+                </option>
+              ))}
+            </select>
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M2 3.5L5 6.5L8 3.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </div>
+
+          {selectedFramework ? (
+            <button
+              type="button"
+              className="editor-framework-toggle"
+              onClick={() => setIsFrameworkPanelOpen((previous) => !previous)}
+            >
+              Customize sections
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {selectedFramework && isFrameworkPanelOpen ? (
+        <section className="editor-framework-panel">
+          <div className="editor-framework-panel-header">
+            <p className="editor-framework-panel-title">Customize sections</p>
+            <p className="editor-framework-panel-subtitle">
+              Select the sections to include for {selectedFramework.label}
+            </p>
+          </div>
+
+          <div className="editor-framework-section-list">
+            {selectedFramework.sections.map((section) => (
+              <label key={section.sectionKey} className="editor-framework-section-row">
+                <input
+                  type="checkbox"
+                  checked={selectedSectionKeys.includes(section.sectionKey)}
+                  onChange={(event) => {
+                    handleToggleSection(section.sectionKey, event.currentTarget.checked);
+                  }}
+                />
+                <span className="editor-framework-section-line">
+                  {formatChecklistLabel(section.label)}: {section.helper}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="editor-framework-actions">
+            <button
+              type="button"
+              className="editor-framework-action"
+              onClick={handleResetDefaults}
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              className="editor-framework-action editor-framework-action-primary"
+              onClick={handleApply}
+            >
+              Apply
+            </button>
+          </div>
+
+          {hasAppliedFramework ? (
+            <p className="editor-framework-live-note">The checklist now controls sections in the note.</p>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="editor-toolbar">
         <div className="editor-toolbar-group">
           <button
@@ -516,6 +1197,40 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
           style={editorScaleStyle}
         />
       </div>
+
+      {pendingApply ? (
+        <div className="editor-template-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="editor-template-modal">
+            <h3>Apply framework</h3>
+            <p>
+              This note already has content. Choose how to apply the selected framework sections.
+            </p>
+            <div className="editor-template-modal-actions">
+              <button
+                type="button"
+                className="editor-framework-action"
+                onClick={() => setPendingApply(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="editor-framework-action"
+                onClick={() => handleCommitApply("replace")}
+              >
+                Replace existing content
+              </button>
+              <button
+                type="button"
+                className="editor-framework-action editor-framework-action-primary"
+                onClick={() => handleCommitApply("insertTop")}
+              >
+                Insert at top
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

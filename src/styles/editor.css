@@ -35,6 +35,168 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
+.editor-framework-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.editor-framework-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-framework-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.editor-framework-select-wrap {
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-framework-select {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 132px;
+  appearance: none;
+}
+
+.editor-framework-select:focus {
+  outline: none;
+}
+
+.editor-framework-toggle {
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-button);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease),
+    border-color var(--motion-duration) var(--motion-ease);
+}
+
+.editor-framework-toggle:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.editor-framework-panel {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  padding: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.editor-framework-panel-header {
+  margin-bottom: 8px;
+}
+
+.editor-framework-panel-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.editor-framework-panel-subtitle {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.editor-framework-section-list {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-framework-section-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.editor-framework-section-row input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.editor-framework-section-line {
+  min-width: 0;
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-framework-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.editor-framework-action {
+  height: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-button);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 10px;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease),
+    border-color var(--motion-duration) var(--motion-ease);
+}
+
+.editor-framework-action:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.editor-framework-action-primary {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border-default));
+  background: color-mix(in oklab, var(--accent-subtle) 65%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.editor-framework-live-note {
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
 .editor-toolbar-group {
   display: flex;
   align-items: center;
@@ -217,6 +379,22 @@
   color: var(--text-tertiary);
 }
 
+.prompt-line-label {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+
+.tiptap p.prompt-line-has-ghost::after {
+  content: attr(data-prompt-helper);
+  margin-left: 0.25rem;
+  color: var(--text-tertiary);
+  opacity: 0.58;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
 .prompt-block {
   margin: 12px 0;
   border: 1px solid var(--border-default);
@@ -331,4 +509,44 @@
   padding: 8px;
   color: var(--text-tertiary);
   font-size: 11px;
+}
+
+.editor-template-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--bg-primary) 70%, transparent);
+}
+
+.editor-template-modal {
+  width: min(480px, calc(100% - 32px));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  padding: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.editor-template-modal h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.editor-template-modal p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.editor-template-modal-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
