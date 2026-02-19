@@ -48,5 +48,10 @@
     "vite": "^7.0.4",
     "vitest": "^4.0.18",
     "kill-port": "^2.0.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
