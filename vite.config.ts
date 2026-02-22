@@ -1,8 +1,21 @@
+import { existsSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+const workspaceRoot = process.cwd();
+const pnpmDir = join(workspaceRoot, "node_modules", ".pnpm");
+const fsAllow = [workspaceRoot];
+
+if (existsSync(pnpmDir)) {
+  try {
+    fsAllow.push(realpathSync(pnpmDir));
+  } catch {
+    // Keep default allow list when .pnpm cannot be resolved.
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -20,6 +33,9 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
+    fs: {
+      allow: fsAllow,
+    },
     hmr: host
       ? {
           protocol: "ws",

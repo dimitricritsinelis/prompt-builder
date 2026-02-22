@@ -41,11 +41,11 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Frontend lint
-        run: pnpm lint
+      - name: Quick verify gate
+        run: pnpm verify:quick
 
-      - name: Frontend tests
-        run: pnpm test
+      - name: Frontend build
+        run: pnpm build
 
       - name: Rust format check
         working-directory: src-tauri
@@ -58,6 +58,14 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
+
+      - name: Rust no-default-features check
+        working-directory: src-tauri
+        run: cargo check --no-default-features
+
+      - name: Prompt startup smoke (macOS)
+        if: runner.os == 'macOS'
+        run: pnpm smoke:startup
 
       - name: Optional Tauri build
         if: ${{ vars.CI_TAURI_BUILD == 'true' }}

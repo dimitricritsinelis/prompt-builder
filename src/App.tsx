@@ -10,7 +10,7 @@ import type {
   OpenAITokenizeResponse,
   TokenMode,
 } from "./lib/openaiTokenWorker";
-import type { Note } from "./lib/tauri";
+import type { NoteMeta } from "./lib/tauri";
 import { countWords, estimateOpenAITokens } from "./lib/tokenCount";
 import { useNotes } from "./hooks/useNotes";
 
@@ -20,6 +20,22 @@ type UndoToast = {
   noteId: string;
   title: string;
 };
+
+type StartupReadyPayload = {
+  rustReadyMs: number;
+};
+
+type StartupMetrics = {
+  rustReadyMs: number | null;
+  appFirstCommitMs: number | null;
+  firstContentfulPaintMs: number | null;
+};
+
+declare global {
+  interface Window {
+    __PROMPTPAD_RUST_READY_MS__?: number;
+  }
+}
 
 const THEME_STORAGE_KEY = "promptpad-theme";
 const LEFT_PANEL_STORAGE_KEY = "promptpad-left-panel-open";
@@ -49,6 +65,10 @@ function getInitialTokenMode(): TokenMode {
   return stored === "exact" ? "exact" : "estimate";
 }
 
+function formatMs(value: number | null): string {
+  return value === null ? "n/a" : `${value}ms`;
+}
+
 function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [tokenMode, setTokenMode] = useState<TokenMode>(getInitialTokenMode);
@@ -60,6 +80,11 @@ function App() {
   );
   const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
   const [hintToast, setHintToast] = useState<string | null>(null);
+  const [startupMetrics, setStartupMetrics] = useState<StartupMetrics>({
+    rustReadyMs: null,
+    appFirstCommitMs: null,
+    firstContentfulPaintMs: null,
+  });
   const undoTimeoutRef = useRef<number | null>(null);
   const hintTimeoutRef = useRef<number | null>(null);
   const tokenizeWorkerRef = useRef<Worker | null>(null);
@@ -92,42 +117,19 @@ function App() {
     () => estimateOpenAITokens(editorBodyText),
     [editorBodyText],
   );
+  const ensureTokenWorker = useCallback((): Worker | null => {
+    if (tokenizeWorkerRef.current) {
+      return tokenizeWorkerRef.current;
+    }
 
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
-
-  useEffect(() => {
-    tokenModeRef.current = tokenMode;
-    window.localStorage.setItem(TOKEN_MODE_STORAGE_KEY, tokenMode);
-  }, [tokenMode]);
-
-  useEffect(() => {
-    window.localStorage.setItem(LEFT_PANEL_STORAGE_KEY, String(isLeftPanelOpen));
-  }, [isLeftPanelOpen]);
-
-  useEffect(() => {
-    window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(isRightPanelOpen));
-  }, [isRightPanelOpen]);
-
-  useEffect(() => {
-    const bodyText = activeNote?.bodyText ?? "";
-    setEditorBodyText(bodyText);
-    setEditorWordCount(countWords(bodyText));
-    setExactTokenCount(null);
-  }, [activeNote?.id, activeNote?.bodyText]);
-
-  useEffect(() => {
     if (typeof Worker === "undefined") {
       setIsExactTokenizerAvailable(false);
-      return;
+      return null;
     }
 
     const worker = new Worker(new URL("./workers/openaiTokenize.worker.ts", import.meta.url), {
       type: "module",
     });
-    tokenizeWorkerRef.current = worker;
 
     worker.onmessage = (event: MessageEvent<OpenAITokenizeResponse>) => {
       const message = event.data;
@@ -151,12 +153,132 @@ function App() {
       setExactTokenCount(null);
     };
 
+    tokenizeWorkerRef.current = worker;
+    return worker;
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    tokenModeRef.current = tokenMode;
+    window.localStorage.setItem(TOKEN_MODE_STORAGE_KEY, tokenMode);
+  }, [tokenMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LEFT_PANEL_STORAGE_KEY, String(isLeftPanelOpen));
+  }, [isLeftPanelOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem(RIGHT_PANEL_STORAGE_KEY, String(isRightPanelOpen));
+  }, [isRightPanelOpen]);
+
+  useEffect(() => {
+    performance.mark("promptpad:app:first-commit");
+
+    let appFirstCommitMs: number | null = null;
+    try {
+      performance.measure(
+        "promptpad:startup:main-eval-to-first-commit",
+        "promptpad:main:module-eval:start",
+        "promptpad:app:first-commit",
+      );
+      const measures = performance.getEntriesByName(
+        "promptpad:startup:main-eval-to-first-commit",
+      );
+      const latestMeasure = measures[measures.length - 1];
+      if (latestMeasure) {
+        appFirstCommitMs = Math.round(latestMeasure.duration);
+      }
+    } catch {
+      appFirstCommitMs = null;
+    }
+
+    const paintEntries = performance.getEntriesByName("first-contentful-paint");
+    const firstPaintEntry = paintEntries[paintEntries.length - 1];
+    const firstContentfulPaintMs =
+      firstPaintEntry && Number.isFinite(firstPaintEntry.startTime)
+        ? Math.round(firstPaintEntry.startTime)
+        : null;
+
+    setStartupMetrics((current) => ({
+      ...current,
+      appFirstCommitMs,
+      firstContentfulPaintMs,
+    }));
+
+    if (import.meta.env.DEV) {
+      console.info(
+        `[startup] app first commit=${formatMs(appFirstCommitMs)}; first contentful paint=${formatMs(firstContentfulPaintMs)}`,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Number.isFinite(window.__PROMPTPAD_RUST_READY_MS__)) {
+      setStartupMetrics((current) => ({
+        ...current,
+        rustReadyMs: Math.round(window.__PROMPTPAD_RUST_READY_MS__ ?? 0),
+      }));
+    }
+
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<StartupReadyPayload>("startup:ready", (event) => {
+          const rustReadyMs = Number(event.payload?.rustReadyMs);
+          if (!Number.isFinite(rustReadyMs)) return;
+
+          const rounded = Math.round(rustReadyMs);
+          window.__PROMPTPAD_RUST_READY_MS__ = rounded;
+
+          setStartupMetrics((current) => ({
+            ...current,
+            rustReadyMs: rounded,
+          }));
+
+          if (import.meta.env.DEV) {
+            console.info(`[startup] rust ready=${formatMs(rounded)}`);
+          }
+        }),
+      )
+      .then((detach) => {
+        if (disposed) {
+          detach();
+          return;
+        }
+        unlisten = detach;
+      })
+      .catch(() => {
+        // Ignore on web-only runs where the Tauri event bridge is unavailable.
+      });
+
+    return () => {
+      disposed = true;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const bodyText = activeNote?.bodyText ?? "";
+    setEditorBodyText(bodyText);
+    setEditorWordCount(countWords(bodyText));
+    setExactTokenCount(null);
+  }, [activeNote?.id, activeNote?.bodyText]);
+
+  useEffect(() => {
     return () => {
       if (tokenDebounceRef.current) {
         window.clearTimeout(tokenDebounceRef.current);
         tokenDebounceRef.current = null;
       }
-      worker.terminate();
+      tokenizeWorkerRef.current?.terminate();
       tokenizeWorkerRef.current = null;
     };
   }, []);
@@ -171,9 +293,12 @@ function App() {
       return;
     }
 
-    if (!isExactTokenizerAvailable || !tokenizeWorkerRef.current) {
+    if (!isExactTokenizerAvailable) {
       return;
     }
+
+    const worker = ensureTokenWorker();
+    if (!worker) return;
 
     const requestId = tokenizeRequestIdRef.current + 1;
     tokenizeRequestIdRef.current = requestId;
@@ -185,7 +310,7 @@ function App() {
         text: editorBodyText,
         encoding: "o200k_base",
       };
-      tokenizeWorkerRef.current?.postMessage(request);
+      worker.postMessage(request);
     }, 320);
 
     return () => {
@@ -194,7 +319,7 @@ function App() {
         tokenDebounceRef.current = null;
       }
     };
-  }, [activeNote?.id, editorBodyText, isExactTokenizerAvailable, tokenMode]);
+  }, [activeNote?.id, editorBodyText, ensureTokenWorker, isExactTokenizerAvailable, tokenMode]);
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -280,7 +405,7 @@ function App() {
           ? "Loading..."
           : "Ready";
 
-  const handleTrash = async (note: Note) => {
+  const handleTrash = async (note: NoteMeta) => {
     await trashNote(note.id);
     if (undoTimeoutRef.current) {
       window.clearTimeout(undoTimeoutRef.current);
@@ -409,6 +534,17 @@ function App() {
           />
         )}
       </div>
+
+      {import.meta.env.DEV ? (
+        <div className="pointer-events-none absolute bottom-2 left-2 z-40 rounded-[10px] border border-[var(--border-default)] bg-[var(--bg-surface)]/90 px-2.5 py-2 text-[10px] text-[var(--text-tertiary)] shadow-[var(--shadow-sm)] backdrop-blur-sm">
+          <p className="font-semibold uppercase tracking-[0.05em] text-[var(--text-secondary)]">
+            Startup
+          </p>
+          <p>Rust ready: {formatMs(startupMetrics.rustReadyMs)}</p>
+          <p>App commit: {formatMs(startupMetrics.appFirstCommitMs)}</p>
+          <p>First paint: {formatMs(startupMetrics.firstContentfulPaintMs)}</p>
+        </div>
+      ) : null}
 
       {undoToast ? (
         <div className="absolute bottom-10 right-4 z-50 flex items-center gap-3 rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 shadow-[var(--shadow-md)]">

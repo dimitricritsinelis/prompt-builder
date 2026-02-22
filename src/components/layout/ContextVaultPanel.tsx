@@ -4,8 +4,7 @@ import { PanelToggleButton } from "../ui/PanelToggleButton";
 
 type VaultBucket = {
   id: string;
-  title: string;
-  injectTarget: "CONTEXT" | "CONSTRAINTS" | "ROLE";
+  defaultTitle: string;
   placeholder: string;
 };
 
@@ -14,36 +13,33 @@ type ContextInjectItem = {
   text: string;
 };
 
+const CONTEXT_TARGET: ContextInjectItem["target"] = "CONTEXT";
+
 const PLACEHOLDER_BUCKETS: VaultBucket[] = [
   {
-    id: "project-eagle-ford",
-    title: "Project: Eagle Ford Optimization",
-    injectTarget: "CONTEXT",
-    placeholder: "Paste project background, goals, and constraints...",
+    id: "context-block-1",
+    defaultTitle: "Context Block 1",
+    placeholder: "Paste context for this block...",
   },
   {
-    id: "dataset-schema",
-    title: "Dataset Schema: Production + Pressure",
-    injectTarget: "CONTEXT",
-    placeholder: "Paste schema details, field definitions, and units...",
+    id: "context-block-2",
+    defaultTitle: "Context Block 2",
+    placeholder: "Paste context for this block...",
   },
   {
-    id: "house-style",
-    title: "House Style: concise, bullet-first",
-    injectTarget: "CONSTRAINTS",
-    placeholder: "Paste preferred writing style and tone guidance...",
+    id: "context-block-3",
+    defaultTitle: "Context Block 3",
+    placeholder: "Paste context for this block...",
   },
   {
-    id: "safety-rules",
-    title: "Safety / Compliance Rules",
-    injectTarget: "CONSTRAINTS",
-    placeholder: "Paste safety/compliance instructions and prohibited actions...",
+    id: "context-block-4",
+    defaultTitle: "Context Block 4",
+    placeholder: "Paste context for this block...",
   },
   {
-    id: "role-persona",
-    title: "Role Persona: Senior DS + PE",
-    injectTarget: "ROLE",
-    placeholder: "Paste role framing, expertise, and perspective...",
+    id: "context-block-5",
+    defaultTitle: "Context Block 5",
+    placeholder: "Paste context for this block...",
   },
 ];
 
@@ -54,6 +50,7 @@ type ContextVaultPanelProps = {
 export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [bucketNames, setBucketNames] = useState<Record<string, string>>({});
   const [bucketContent, setBucketContent] = useState<Record<string, string>>({});
   const selectedCount = useMemo(
     () => Object.values(selected).filter(Boolean).length,
@@ -64,7 +61,7 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
       if (!selected[bucket.id]) return [];
       const text = (bucketContent[bucket.id] ?? "").trim();
       if (!text) return [];
-      return [{ target: bucket.injectTarget, text }];
+      return [{ target: CONTEXT_TARGET, text }];
     });
   }, [bucketContent, selected]);
 
@@ -141,7 +138,7 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
                   </div>
                 </div>
                 <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
-                  Select buckets to inject
+                  Select context blocks to inject
                 </p>
               </div>
             </div>
@@ -151,6 +148,8 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
             {PLACEHOLDER_BUCKETS.map((bucket) => {
               const isChecked = Boolean(selected[bucket.id]);
               const isExpanded = Boolean(expanded[bucket.id]);
+              const customName = bucketNames[bucket.id] ?? "";
+              const title = customName.trim() || bucket.defaultTitle;
               const content = bucketContent[bucket.id] ?? "";
               const wordCount = countWords(content);
               const estimatedTokens = estimateOpenAITokens(content);
@@ -178,19 +177,19 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-[13px] leading-snug text-[var(--text-primary)]">
-                            {bucket.title}
+                            {title}
                           </p>
                           <button
                             type="button"
                             onClick={() => {
                               const text = content.trim();
                               if (!text) return;
-                              emitInjectEvent([{ target: bucket.injectTarget, text }]);
+                              emitInjectEvent([{ target: CONTEXT_TARGET, text }]);
                             }}
                             disabled={content.trim().length === 0}
                             className="mt-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)] transition-colors duration-200 ease-in-out hover:text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-45"
                           >
-                            Inject {"->"} {bucket.injectTarget}
+                            Context Block
                           </button>
                         </div>
 
@@ -234,6 +233,20 @@ export function ContextVaultPanel({ onToggleCollapse }: ContextVaultPanelProps) 
 
                   {isExpanded ? (
                     <div className="mt-2 border-t border-[var(--border-default)] pt-2">
+                      <input
+                        type="text"
+                        value={customName}
+                        onChange={(event) => {
+                          const nextName = event.currentTarget.value;
+                          setBucketNames((previous) => ({
+                            ...previous,
+                            [bucket.id]: nextName,
+                          }));
+                        }}
+                        placeholder={bucket.defaultTitle}
+                        aria-label={`${bucket.defaultTitle} name`}
+                        className="mb-2 h-8 w-full rounded-[var(--radius-button)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 text-[12px] text-[var(--text-primary)] outline-none transition-colors duration-200 ease-in-out placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-subtle)]"
+                      />
                       <textarea
                         value={content}
                         onChange={(event) => {

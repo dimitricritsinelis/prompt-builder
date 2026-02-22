@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { Note } from "../lib/tauri";
+import type { Note, NoteMeta } from "../lib/tauri";
 import { useNoteStore } from "../stores/noteStore";
 
 type UseNotesResult = {
-  notes: Note[];
+  notes: NoteMeta[];
   activeNote: Note | null;
   activeNoteId: string | null;
   searchQuery: string;

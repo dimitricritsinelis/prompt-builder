@@ -26,11 +26,20 @@ import { PromptBlock } from "../../extensions/prompt-block";
 import { useEditorAutosave } from "../../hooks/useEditorAutosave";
 import type { EditorStats } from "../../lib/editorStats";
 import {
+  DEFAULT_HELPER_BY_LABEL,
+  applyFrameworkToContent,
+  formatChecklistLabel,
+  injectContextIntoContent,
+  parsePromptLine,
+  sortSectionKeys,
+  syncFrameworkSectionsInContent,
+  type ApplyMode,
+  type ContextInjectItem,
+} from "../../lib/frameworkEditorOps";
+import {
   getDefaultSectionKeys,
   getFrameworkById,
-  INJECT_TARGET_SECTION_KEY,
   PROMPT_FRAMEWORKS,
-  resolveSectionDefinition,
   type PromptFrameworkDefinition,
   type PromptFrameworkId,
   type PromptSectionKey,
@@ -53,21 +62,8 @@ type HeadingValue = "paragraph" | "h1" | "h2" | "h3";
 type ListValue = "none" | "bullet" | "ordered" | "task";
 type TextAlignValue = "left" | "center" | "right" | "justify";
 type FrameworkSelectValue = "none" | PromptFrameworkId;
-type ApplyMode = "replace" | "insertTop";
-type ContextInjectTarget = keyof typeof INJECT_TARGET_SECTION_KEY;
-type ContextInjectItem = {
-  target: ContextInjectTarget;
-  text: string;
-};
 type ContextInjectEventDetail = {
   items: ContextInjectItem[];
-};
-
-type SectionSegment = {
-  sectionKey: PromptSectionKey;
-  startIndex: number;
-  endIndex: number;
-  bodyNodes: JSONContent[];
 };
 
 const ZOOM_STEPS = [80, 90, 100, 110, 120, 130] as const;
@@ -146,98 +142,6 @@ function getDocContent(editor: TiptapEditor): JSONContent[] {
   return Array.isArray(doc.content) ? doc.content : [];
 }
 
-function textFromNode(node: JSONContent | undefined): string {
-  if (!node) return "";
-
-  const ownText = typeof node.text === "string" ? node.text : "";
-  if (!Array.isArray(node.content)) {
-    return ownText;
-  }
-
-  return `${ownText}${node.content.map((child) => textFromNode(child)).join("")}`;
-}
-
-function normalizedText(value: string): string {
-  return value.replace(/\u00A0/g, " ").trim().toLowerCase();
-}
-
-function isParagraphNode(node: JSONContent): boolean {
-  return node.type === "paragraph";
-}
-
-type PromptLineDefinition = {
-  sectionKey: PromptSectionKey;
-  label: string;
-  helper: string;
-  normalizedLabel: string;
-};
-
-const PROMPT_LINE_DEFINITIONS: PromptLineDefinition[] = (() => {
-  const byLabel = new Map<string, PromptLineDefinition>();
-
-  for (const framework of PROMPT_FRAMEWORKS) {
-    for (const section of framework.sections) {
-      const normalizedLabel = normalizedText(section.label);
-      if (byLabel.has(normalizedLabel)) continue;
-      byLabel.set(normalizedLabel, {
-        sectionKey: section.sectionKey,
-        label: section.label,
-        helper: section.helper,
-        normalizedLabel,
-      });
-    }
-  }
-
-  return [...byLabel.values()];
-})();
-
-const PROMPT_LINE_DEFINITIONS_BY_LENGTH = [...PROMPT_LINE_DEFINITIONS].sort(
-  (left, right) => right.label.length - left.label.length,
-);
-
-const DEFAULT_HELPER_BY_LABEL = (() => {
-  const map = new Map<string, string>();
-  for (const definition of PROMPT_LINE_DEFINITIONS) {
-    map.set(definition.label, definition.helper);
-  }
-  return map;
-})();
-
-type MatchedPromptLine = {
-  definition: PromptLineDefinition;
-  leadingWhitespace: number;
-  labelStart: number;
-  labelEnd: number;
-  prefixEnd: number;
-  remainder: string;
-};
-
-function parsePromptLine(text: string): MatchedPromptLine | null {
-  const leadingWhitespace = text.match(/^\s*/)?.[0].length ?? 0;
-  const trimmedStart = text.slice(leadingWhitespace);
-  const normalizedStart = trimmedStart.toLowerCase();
-
-  for (const definition of PROMPT_LINE_DEFINITIONS_BY_LENGTH) {
-    const prefix = `${definition.label.toLowerCase()}:`;
-    if (!normalizedStart.startsWith(prefix)) continue;
-
-    const suffix = trimmedStart.slice(prefix.length);
-    const suffixLeadingWhitespace = suffix.match(/^\s*/)?.[0].length ?? 0;
-    const remainder = suffix.slice(suffixLeadingWhitespace);
-
-    return {
-      definition,
-      leadingWhitespace,
-      labelStart: leadingWhitespace,
-      labelEnd: leadingWhitespace + definition.label.length + 1,
-      prefixEnd: leadingWhitespace + definition.label.length + 1 + suffixLeadingWhitespace,
-      remainder,
-    };
-  }
-
-  return null;
-}
-
 function createPromptLineGhostExtension(
   getHelperMap: () => Map<string, string>,
 ): Extension {
@@ -292,276 +196,6 @@ function createPromptLineGhostExtension(
         }),
       ];
     },
-  });
-}
-
-function formatChecklistLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/(^|[\s/])([a-z])/g, (_match, prefix: string, letter: string) => {
-      return `${prefix}${letter.toUpperCase()}`;
-    });
-}
-
-function createSectionLineNode(
-  section: PromptFrameworkDefinition["sections"][number],
-  bodyText = "",
-): JSONContent {
-  const value = bodyText.trim();
-  return {
-    type: "paragraph",
-    content: [
-      {
-        type: "text",
-        text: value.length > 0 ? `${section.label}: ${value}` : `${section.label}: `,
-      },
-    ],
-  };
-}
-
-function rewriteLabelOnLine(
-  node: JSONContent,
-  label: string,
-): JSONContent {
-  const lineText = isParagraphNode(node) ? textFromNode(node) : "";
-  const parsed = parsePromptLine(lineText);
-  const remainder = parsed ? parsed.remainder : lineText.trim();
-  const nextText = remainder.length > 0 ? `${label}: ${remainder}` : `${label}: `;
-
-  return {
-    type: "paragraph",
-    content: [{ type: "text", text: nextText }],
-  };
-}
-
-function sortSectionKeys(
-  framework: PromptFrameworkDefinition,
-  keys: PromptSectionKey[],
-): PromptSectionKey[] {
-  const selected = new Set(keys);
-  return framework.sections
-    .map((section) => section.sectionKey)
-    .filter((sectionKey) => selected.has(sectionKey));
-}
-
-function extractFrameworkSegments(
-  content: JSONContent[],
-  framework: PromptFrameworkDefinition,
-): SectionSegment[] {
-  const frameworkSectionsByLabel = new Map(
-    framework.sections.map((section) => [normalizedText(section.label), section] as const),
-  );
-
-  const segments: SectionSegment[] = [];
-
-  for (let index = 0; index < content.length; index += 1) {
-    const node = content[index];
-    if (!isParagraphNode(node)) continue;
-
-    const parsed = parsePromptLine(textFromNode(node));
-    if (!parsed) continue;
-
-    const section = frameworkSectionsByLabel.get(parsed.definition.normalizedLabel);
-    if (!section) continue;
-
-    let endIndex = index + 1;
-    while (endIndex < content.length) {
-      const candidate = content[endIndex];
-      if (!isParagraphNode(candidate)) {
-        endIndex += 1;
-        continue;
-      }
-
-      const candidateParsed = parsePromptLine(textFromNode(candidate));
-      if (
-        candidateParsed &&
-        frameworkSectionsByLabel.has(candidateParsed.definition.normalizedLabel)
-      ) {
-        break;
-      }
-
-      endIndex += 1;
-    }
-
-    segments.push({
-      sectionKey: section.sectionKey,
-      startIndex: index,
-      endIndex,
-      bodyNodes: content.slice(index, endIndex),
-    });
-
-    index = endIndex - 1;
-  }
-
-  return segments;
-}
-
-function buildFrameworkSectionNodes(
-  framework: PromptFrameworkDefinition,
-  sectionKeys: PromptSectionKey[],
-  existingBodies: Map<PromptSectionKey, JSONContent[]>,
-): JSONContent[] {
-  const selected = new Set(sectionKeys);
-  const nextNodes: JSONContent[] = [];
-
-  for (const section of framework.sections) {
-    if (!selected.has(section.sectionKey)) continue;
-
-    const preservedBody = existingBodies.get(section.sectionKey);
-    if (!preservedBody || preservedBody.length === 0) {
-      nextNodes.push(createSectionLineNode(section));
-      continue;
-    }
-
-    const [first, ...rest] = preservedBody;
-    nextNodes.push(rewriteLabelOnLine(first, section.label), ...rest);
-  }
-
-  return nextNodes;
-}
-
-function applyFrameworkToEditor(
-  editor: TiptapEditor,
-  framework: PromptFrameworkDefinition,
-  sectionKeys: PromptSectionKey[],
-  mode: ApplyMode,
-): void {
-  const sectionNodes = buildFrameworkSectionNodes(framework, sectionKeys, new Map());
-
-  if (mode === "replace") {
-    editor.commands.setContent({
-      type: "doc",
-      content: sectionNodes.length > 0 ? sectionNodes : [{ type: "paragraph" }],
-    });
-    return;
-  }
-
-  const currentContent = getDocContent(editor);
-  editor.commands.setContent({
-    type: "doc",
-    content: [...sectionNodes, ...currentContent],
-  });
-}
-
-function syncFrameworkSectionsInEditor(
-  editor: TiptapEditor,
-  framework: PromptFrameworkDefinition,
-  sectionKeys: PromptSectionKey[],
-): boolean {
-  const content = getDocContent(editor);
-  const segments = extractFrameworkSegments(content, framework);
-
-  const existingBodies = new Map<PromptSectionKey, JSONContent[]>();
-  const usedIndexes = new Set<number>();
-
-  for (const segment of segments) {
-    if (!existingBodies.has(segment.sectionKey)) {
-      existingBodies.set(segment.sectionKey, segment.bodyNodes);
-    }
-
-    for (let index = segment.startIndex; index < segment.endIndex; index += 1) {
-      usedIndexes.add(index);
-    }
-  }
-
-  const selected = new Set(sectionKeys);
-  for (const segment of segments) {
-    if (selected.has(segment.sectionKey)) continue;
-
-    const bodyText = segment.bodyNodes
-      .map((node, index) => {
-        if (index !== 0) return textFromNode(node);
-        const parsed = parsePromptLine(textFromNode(node));
-        return parsed ? parsed.remainder : textFromNode(node);
-      })
-      .join("\n")
-      .trim();
-    if (!bodyText) continue;
-
-    const shouldDelete = window.confirm(
-      `Remove ${segment.sectionKey.replace(/_/g, " ").toUpperCase()} section and delete its content?`,
-    );
-
-    if (!shouldDelete) {
-      return false;
-    }
-  }
-
-  const nextFrameworkNodes = buildFrameworkSectionNodes(framework, sectionKeys, existingBodies);
-  const otherNodes = content.filter((_, index) => !usedIndexes.has(index));
-
-  editor.commands.setContent({
-    type: "doc",
-    content:
-      nextFrameworkNodes.length > 0 || otherNodes.length > 0
-        ? [...nextFrameworkNodes, ...otherNodes]
-        : [{ type: "paragraph" }],
-  });
-
-  return true;
-}
-
-function injectContextIntoSections(editor: TiptapEditor, items: ContextInjectItem[]): void {
-  const entries = items
-    .map((item) => ({
-      target: item.target,
-      text: item.text.trim(),
-    }))
-    .filter((item) => item.text.length > 0);
-
-  if (entries.length === 0) return;
-
-  const content = JSON.parse(JSON.stringify(getDocContent(editor))) as JSONContent[];
-
-  for (const item of entries) {
-    const sectionKey = INJECT_TARGET_SECTION_KEY[item.target];
-    const sectionDefinition = resolveSectionDefinition(sectionKey);
-    const label = sectionDefinition?.label ?? item.target;
-
-    const lineIndex = content.findIndex((node) => {
-      if (!isParagraphNode(node)) return false;
-      const parsed = parsePromptLine(textFromNode(node));
-      return parsed ? normalizedText(parsed.definition.label) === normalizedText(label) : false;
-    });
-
-    if (lineIndex < 0) {
-      content.unshift({
-        type: "paragraph",
-        content: [{ type: "text", text: `${label}: ${item.text}` }],
-      });
-      continue;
-    }
-
-    const parsed = parsePromptLine(textFromNode(content[lineIndex]));
-    if (parsed && parsed.remainder.trim().length === 0) {
-      content[lineIndex] = {
-        type: "paragraph",
-        content: [{ type: "text", text: `${label}: ${item.text}` }],
-      };
-      continue;
-    }
-
-    let insertAt = lineIndex + 1;
-    while (insertAt < content.length) {
-      const candidate = content[insertAt];
-      if (!isParagraphNode(candidate)) {
-        insertAt += 1;
-        continue;
-      }
-      const candidateParsed = parsePromptLine(textFromNode(candidate));
-      if (candidateParsed) break;
-      insertAt += 1;
-    }
-
-    content.splice(insertAt, 0, {
-      type: "paragraph",
-      content: [{ type: "text", text: item.text }],
-    });
-  }
-
-  editor.commands.setContent({
-    type: "doc",
-    content: content.length > 0 ? content : [{ type: "paragraph" }],
   });
 }
 
@@ -786,7 +420,11 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
       const customEvent = event as CustomEvent<ContextInjectEventDetail>;
       const detail = customEvent.detail;
       if (!detail || !Array.isArray(detail.items)) return;
-      injectContextIntoSections(editor, detail.items);
+      const nextContent = injectContextIntoContent(getDocContent(editor), detail.items);
+      editor.commands.setContent({
+        type: "doc",
+        content: nextContent.length > 0 ? nextContent : [{ type: "paragraph" }],
+      });
     };
 
     window.addEventListener("promptpad:inject-context", handleContextInject as EventListener);
@@ -877,8 +515,20 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
       const ordered = sortSectionKeys(selectedFramework, nextKeys);
 
       if (hasAppliedFramework) {
-        const synced = syncFrameworkSectionsInEditor(editor, selectedFramework, ordered);
-        if (!synced) return;
+        const result = syncFrameworkSectionsInContent(
+          getDocContent(editor),
+          selectedFramework,
+          ordered,
+          (nextSectionKey) =>
+            window.confirm(
+              `Remove ${nextSectionKey.replace(/_/g, " ").toUpperCase()} section and delete its content?`,
+            ),
+        );
+        if (!result.applied) return;
+        editor.commands.setContent({
+          type: "doc",
+          content: result.content,
+        });
       }
 
       setSelectedSectionKeys(ordered);
@@ -891,8 +541,20 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
 
     const defaults = getDefaultSectionKeys(selectedFramework.id);
     if (hasAppliedFramework) {
-      const synced = syncFrameworkSectionsInEditor(editor, selectedFramework, defaults);
-      if (!synced) return;
+      const result = syncFrameworkSectionsInContent(
+        getDocContent(editor),
+        selectedFramework,
+        defaults,
+        (nextSectionKey) =>
+          window.confirm(
+            `Remove ${nextSectionKey.replace(/_/g, " ").toUpperCase()} section and delete its content?`,
+          ),
+      );
+      if (!result.applied) return;
+      editor.commands.setContent({
+        type: "doc",
+        content: result.content,
+      });
     }
 
     setSelectedSectionKeys(defaults);
@@ -905,7 +567,10 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
     const hasContent = extractBodyText(editor).length > 0;
 
     if (!hasContent) {
-      applyFrameworkToEditor(editor, selectedFramework, ordered, "replace");
+      editor.commands.setContent({
+        type: "doc",
+        content: applyFrameworkToContent(getDocContent(editor), selectedFramework, ordered, "replace"),
+      });
       setHasAppliedFramework(true);
       setIsFrameworkPanelOpen(false);
       return;
@@ -920,7 +585,15 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
   const handleCommitApply = useCallback(
     (mode: ApplyMode) => {
       if (!editor || !pendingApply) return;
-      applyFrameworkToEditor(editor, pendingApply.framework, pendingApply.sectionKeys, mode);
+      editor.commands.setContent({
+        type: "doc",
+        content: applyFrameworkToContent(
+          getDocContent(editor),
+          pendingApply.framework,
+          pendingApply.sectionKeys,
+          mode,
+        ),
+      });
       setHasAppliedFramework(true);
       setIsFrameworkPanelOpen(false);
       setPendingApply(null);

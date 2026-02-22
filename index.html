@@ -4,11 +4,120 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>PromptPad</title>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <style>
+        :root {
+          color-scheme: light dark;
+        }
+
+        .boot-shell {
+          align-items: center;
+          background: radial-gradient(circle at 0 0, #f2ede4 0%, #ece7df 42%, #e5dfd5 100%);
+          color: #2f2923;
+          display: flex;
+          font-family:
+            "SF Pro Text",
+            "Segoe UI",
+            "Helvetica Neue",
+            Arial,
+            sans-serif;
+          inset: 0;
+          justify-content: center;
+          padding: 24px;
+          position: fixed;
+        }
+
+        .boot-card {
+          background: rgba(255, 255, 255, 0.72);
+          border: 1px solid rgba(122, 99, 70, 0.18);
+          border-radius: 16px;
+          box-shadow: 0 12px 32px rgba(67, 53, 35, 0.14);
+          max-width: 420px;
+          padding: 18px 20px 16px;
+          width: min(100%, 420px);
+        }
+
+        .boot-title {
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          margin: 0;
+        }
+
+        .boot-subtitle {
+          color: rgba(49, 40, 32, 0.74);
+          font-size: 12px;
+          margin: 6px 0 0;
+        }
+
+        .boot-track {
+          background: rgba(121, 100, 69, 0.18);
+          border-radius: 999px;
+          height: 6px;
+          margin-top: 14px;
+          overflow: hidden;
+        }
+
+        .boot-bar {
+          animation: boot-slide 1.2s ease-in-out infinite;
+          background: linear-gradient(90deg, #8e6f45 0%, #a98454 100%);
+          border-radius: 999px;
+          height: 100%;
+          transform-origin: left center;
+          width: 34%;
+        }
+
+        @keyframes boot-slide {
+          0% {
+            transform: translateX(-130%);
+          }
+          65% {
+            transform: translateX(290%);
+          }
+          100% {
+            transform: translateX(290%);
+          }
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .boot-shell {
+            background: radial-gradient(circle at 0 0, #212529 0%, #1a1d20 46%, #15171a 100%);
+            color: #f4eee5;
+          }
+
+          .boot-card {
+            background: rgba(25, 28, 32, 0.86);
+            border-color: rgba(209, 187, 153, 0.24);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+          }
+
+          .boot-subtitle {
+            color: rgba(246, 237, 223, 0.72);
+          }
+
+          .boot-track {
+            background: rgba(196, 170, 132, 0.24);
+          }
+
+          .boot-bar {
+            background: linear-gradient(90deg, #b89262 0%, #d0ab79 100%);
+          }
+        }
+      </style>
+      <div class="boot-shell" role="status" aria-live="polite">
+        <div class="boot-card">
+          <p class="boot-title">Loading PromptPad...</p>
+          <p class="boot-subtitle">Preparing your local workspace.</p>
+          <div class="boot-track" aria-hidden="true">
+            <div class="boot-bar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

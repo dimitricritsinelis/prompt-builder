@@ -15,6 +15,16 @@ export type Note = {
   isTrashed: boolean;
 };
 
+export type NoteMeta = {
+  id: string;
+  title: string;
+  noteType: NoteType;
+  createdAt: string;
+  updatedAt: string;
+  isPinned: boolean;
+  isTrashed: boolean;
+};
+
 export type NoteUpdateInput = {
   id: string;
   title: string;
@@ -50,8 +60,16 @@ export async function noteList(includeTrashed = false): Promise<Note[]> {
   return invoke<Note[]>("note_list", { includeTrashed });
 }
 
+export async function noteListMeta(includeTrashed = false): Promise<NoteMeta[]> {
+  return invoke<NoteMeta[]>("note_list_meta", { includeTrashed });
+}
+
 export async function noteSearch(query: string): Promise<Note[]> {
   return invoke<Note[]>("note_search", { query });
+}
+
+export async function noteSearchMeta(query: string): Promise<NoteMeta[]> {
+  return invoke<NoteMeta[]>("note_search_meta", { query });
 }
 
 export async function notePin(id: string, pinned: boolean): Promise<void> {

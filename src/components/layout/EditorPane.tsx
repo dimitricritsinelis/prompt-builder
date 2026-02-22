@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Editor } from "../editor/Editor";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { EditorStats } from "../../lib/editorStats";
 import type { Note } from "../../lib/tauri";
 import { Input } from "../ui/Input";
@@ -15,6 +14,25 @@ type EditorPaneProps = {
   ) => Promise<void>;
   onStatsChange: (stats: EditorStats) => void;
 };
+
+const LazyEditor = lazy(() =>
+  import("../editor/Editor").then((module) => ({ default: module.Editor })),
+);
+
+function EditorLoadingFallback() {
+  return (
+    <section className="h-full rounded-[var(--radius-card)] border border-[var(--border-default)] bg-[var(--bg-primary)]/70 p-5">
+      <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.05em] text-[var(--text-tertiary)]">
+        Loading editor...
+      </p>
+      <div className="mt-4 space-y-2">
+        <div className="h-3 w-5/6 rounded-full bg-[var(--bg-surface-hover)]" />
+        <div className="h-3 w-full rounded-full bg-[var(--bg-surface-hover)]" />
+        <div className="h-3 w-4/5 rounded-full bg-[var(--bg-surface-hover)]" />
+      </div>
+    </section>
+  );
+}
 
 export function EditorPane({
   activeNote,
@@ -76,12 +94,14 @@ export function EditorPane({
 
           {activeNote ? (
             <div className="mt-4 min-h-0 flex-1">
-              <Editor
-                key={activeNote.id}
-                note={activeNote}
-                onSaveBody={onSaveBody}
-                onStatsChange={onStatsChange}
-              />
+              <Suspense fallback={<EditorLoadingFallback />}>
+                <LazyEditor
+                  key={activeNote.id}
+                  note={activeNote}
+                  onSaveBody={onSaveBody}
+                  onStatsChange={onStatsChange}
+                />
+              </Suspense>
             </div>
           ) : (
             <section className="editor-placeholder-block mt-4">

@@ -1,4 +1,4 @@
-import type { Note } from "../../lib/tauri";
+import type { NoteMeta } from "../../lib/tauri";
 import { PanelToggleButton } from "../ui/PanelToggleButton";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -8,11 +8,11 @@ type SidebarProps = {
   onSearchChange: (value: string) => void;
   onNewNote: () => void;
   onNewPrompt: () => void;
-  notes: Note[];
+  notes: NoteMeta[];
   activeNoteId: string | null;
   onSelectNote: (id: string) => void;
   onPinToggle: (id: string, pinned: boolean) => void;
-  onTrash: (note: Note) => void;
+  onTrash: (note: NoteMeta) => void;
   isLoading: boolean;
   theme: "light" | "dark";
   onToggleTheme: () => void;
@@ -45,8 +45,8 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function groupByDate(notes: Note[]): Record<DateGroupLabel, Note[]> {
-  const grouped: Record<DateGroupLabel, Note[]> = {
+function groupByDate(notes: NoteMeta[]): Record<DateGroupLabel, NoteMeta[]> {
+  const grouped: Record<DateGroupLabel, NoteMeta[]> = {
     Today: [],
     Yesterday: [],
     "This Week": [],
@@ -98,7 +98,7 @@ function NoteRow({
   onPinToggle,
   onTrash,
 }: {
-  note: Note;
+  note: NoteMeta;
   isActive: boolean;
   onSelect: () => void;
   onPinToggle: () => void;

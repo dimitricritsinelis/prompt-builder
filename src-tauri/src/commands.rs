@@ -1,4 +1,4 @@
-use crate::db::{Db, Note};
+use crate::db::{Db, Note, NoteMeta};
 use tauri::State;
 
 #[tauri::command]
@@ -43,8 +43,18 @@ pub fn note_list(db: State<'_, Db>, include_trashed: bool) -> Result<Vec<Note>, 
 }
 
 #[tauri::command]
+pub fn note_list_meta(db: State<'_, Db>, include_trashed: bool) -> Result<Vec<NoteMeta>, String> {
+    db.list_notes_meta(include_trashed)
+}
+
+#[tauri::command]
 pub fn note_search(db: State<'_, Db>, query: String) -> Result<Vec<Note>, String> {
     db.search_notes(&query)
+}
+
+#[tauri::command]
+pub fn note_search_meta(db: State<'_, Db>, query: String) -> Result<Vec<NoteMeta>, String> {
+    db.search_notes_meta(&query)
 }
 
 #[tauri::command]

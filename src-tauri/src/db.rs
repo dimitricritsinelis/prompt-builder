@@ -24,6 +24,18 @@ pub struct Note {
     pub is_trashed: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteMeta {
+    pub id: String,
+    pub title: String,
+    pub note_type: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub is_pinned: bool,
+    pub is_trashed: bool,
+}
+
 #[derive(Clone)]
 pub struct Db {
     pool: Pool<SqliteConnectionManager>,
@@ -218,6 +230,34 @@ impl Db {
         Ok(notes)
     }
 
+    pub fn list_notes_meta(&self, include_trashed: bool) -> Result<Vec<NoteMeta>, String> {
+        let conn = self.get_conn()?;
+        let query = if include_trashed {
+            "SELECT id, title, note_type, created_at, updated_at, is_pinned, is_trashed
+             FROM notes
+             ORDER BY is_pinned DESC, updated_at DESC"
+        } else {
+            "SELECT id, title, note_type, created_at, updated_at, is_pinned, is_trashed
+             FROM notes
+             WHERE is_trashed = 0
+             ORDER BY is_pinned DESC, updated_at DESC"
+        };
+
+        let mut stmt = conn
+            .prepare(query)
+            .map_err(|error| format!("failed to prepare note meta list query: {error}"))?;
+
+        let rows = stmt
+            .query_map([], note_meta_from_row)
+            .map_err(|error| format!("failed to list note metadata: {error}"))?;
+
+        let mut notes = Vec::new();
+        for row in rows {
+            notes.push(row.map_err(|error| format!("failed to map note metadata row: {error}"))?);
+        }
+        Ok(notes)
+    }
+
     pub fn search_notes(&self, query: &str) -> Result<Vec<Note>, String> {
         let cleaned = query.trim();
         if cleaned.is_empty() {
@@ -243,6 +283,38 @@ impl Db {
         let mut notes = Vec::new();
         for row in rows {
             notes.push(row.map_err(|error| format!("failed to map search row: {error}"))?);
+        }
+
+        Ok(notes)
+    }
+
+    pub fn search_notes_meta(&self, query: &str) -> Result<Vec<NoteMeta>, String> {
+        let cleaned = query.trim();
+        if cleaned.is_empty() {
+            return self.list_notes_meta(false);
+        }
+
+        let conn = self.get_conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT n.id, n.title, n.note_type, n.created_at, n.updated_at, n.is_pinned, n.is_trashed
+                 FROM notes_fts
+                 JOIN notes n ON n.rowid = notes_fts.rowid
+                 WHERE notes_fts MATCH ?1
+                   AND n.is_trashed = 0
+                 ORDER BY n.is_pinned DESC, bm25(notes_fts), n.updated_at DESC",
+            )
+            .map_err(|error| format!("failed to prepare note metadata search query: {error}"))?;
+
+        let rows = stmt
+            .query_map(params![cleaned], note_meta_from_row)
+            .map_err(|error| format!("failed to run note metadata search query: {error}"))?;
+
+        let mut notes = Vec::new();
+        for row in rows {
+            notes.push(
+                row.map_err(|error| format!("failed to map note metadata search row: {error}"))?,
+            );
         }
 
         Ok(notes)
@@ -346,6 +418,18 @@ fn note_from_row(row: &Row<'_>) -> rusqlite::Result<Note> {
     })
 }
 
+fn note_meta_from_row(row: &Row<'_>) -> rusqlite::Result<NoteMeta> {
+    Ok(NoteMeta {
+        id: row.get("id")?,
+        title: row.get("title")?,
+        note_type: row.get("note_type")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+        is_pinned: row.get::<_, i64>("is_pinned")? != 0,
+        is_trashed: row.get::<_, i64>("is_trashed")? != 0,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::Db;
@@ -409,6 +493,59 @@ mod tests {
         .expect("beta note should update");
 
         let results = db.search_notes("alpha").expect("search should succeed");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, alpha.id);
+    }
+
+    #[test]
+    fn lists_note_metadata_without_loading_body_fields() {
+        let db = Db::initialize_in_memory().expect("in-memory db should initialize");
+        let note = db.create_note("prompt").expect("note should be created");
+
+        db.set_note_pinned(&note.id, true)
+            .expect("note should be pinnable");
+
+        let listed = db
+            .list_notes_meta(false)
+            .expect("note metadata listing should succeed");
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, note.id);
+        assert_eq!(listed[0].note_type, "prompt");
+        assert!(listed[0].is_pinned);
+        assert!(!listed[0].is_trashed);
+    }
+
+    #[test]
+    fn searches_note_metadata_using_fts() {
+        let db = Db::initialize_in_memory().expect("in-memory db should initialize");
+        let alpha = db
+            .create_note("freeform")
+            .expect("alpha note should be created");
+        let beta = db
+            .create_note("freeform")
+            .expect("beta note should be created");
+
+        db.update_note(
+            &alpha.id,
+            "Alpha title",
+            r#"{"type":"doc","content":[{"type":"paragraph","text":"alpha"}]}"#,
+            "alpha keyword",
+        )
+        .expect("alpha note should update");
+
+        db.update_note(
+            &beta.id,
+            "Beta title",
+            r#"{"type":"doc","content":[{"type":"paragraph","text":"beta"}]}"#,
+            "beta keyword",
+        )
+        .expect("beta note should update");
+
+        let results = db
+            .search_notes_meta("alpha")
+            .expect("note metadata search should succeed");
+
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, alpha.id);
     }

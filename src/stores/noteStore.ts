@@ -1,20 +1,21 @@
 import { create } from "zustand";
 import {
   type Note,
+  type NoteMeta,
   type NoteType,
   noteCreate,
   noteDelete,
   noteGet,
-  noteList,
+  noteListMeta,
   notePin,
   noteRestore,
-  noteSearch,
+  noteSearchMeta,
   noteUpdate,
 } from "../lib/tauri";
 import { promptTemplateDoc, promptTemplateText } from "../lib/promptBlocks";
 
 type NoteStoreState = {
-  notes: Note[];
+  notes: NoteMeta[];
   activeNote: Note | null;
   activeNoteId: string | null;
   searchQuery: string;
@@ -43,7 +44,7 @@ function defaultTitleForType(noteType: NoteType): string {
   return noteType === "prompt" ? "Prompt" : "Note";
 }
 
-function sortNotes(notes: Note[]): Note[] {
+function sortNotes(notes: NoteMeta[]): NoteMeta[] {
   return [...notes].sort((a, b) => {
     if (a.isPinned !== b.isPinned) {
       return a.isPinned ? -1 : 1;
@@ -52,37 +53,74 @@ function sortNotes(notes: Note[]): Note[] {
   });
 }
 
-function resolveActiveNote(
-  notes: Note[],
-  preferredId: string | null,
-): { activeNoteId: string | null; activeNote: Note | null } {
-  const nextActiveId =
-    preferredId && notes.some((note) => note.id === preferredId)
-      ? preferredId
-      : notes[0]?.id ?? null;
-
+function toNoteMeta(note: Note): NoteMeta {
   return {
-    activeNoteId: nextActiveId,
-    activeNote: nextActiveId
-      ? notes.find((note) => note.id === nextActiveId) ?? null
-      : null,
+    id: note.id,
+    title: note.title,
+    noteType: note.noteType,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
+    isPinned: note.isPinned,
+    isTrashed: note.isTrashed,
   };
 }
 
-async function loadVisibleNotes(query: string): Promise<Note[]> {
+function upsertNoteMeta(notes: NoteMeta[], updated: NoteMeta): NoteMeta[] {
+  const hasExisting = notes.some((note) => note.id === updated.id);
+  if (!hasExisting) {
+    return sortNotes([updated, ...notes]);
+  }
+
+  return sortNotes(notes.map((note) => (note.id === updated.id ? updated : note)));
+}
+
+function resolveActiveNoteId(notes: NoteMeta[], preferredId: string | null): string | null {
+  if (preferredId && notes.some((note) => note.id === preferredId)) {
+    return preferredId;
+  }
+
+  return notes[0]?.id ?? null;
+}
+
+async function loadVisibleNotes(query: string): Promise<NoteMeta[]> {
   const cleaned = query.trim();
   if (!cleaned) {
-    return sortNotes(await noteList(false));
+    return sortNotes(await noteListMeta(false));
   }
-  return sortNotes(await noteSearch(cleaned));
+
+  return sortNotes(await noteSearchMeta(cleaned));
+}
+
+async function resolveActiveNote(
+  notes: NoteMeta[],
+  preferredId: string | null,
+  currentActive: Note | null,
+): Promise<{ activeNoteId: string | null; activeNote: Note | null }> {
+  const activeNoteId = resolveActiveNoteId(notes, preferredId);
+  if (!activeNoteId) {
+    return { activeNoteId: null, activeNote: null };
+  }
+
+  if (currentActive?.id === activeNoteId) {
+    return {
+      activeNoteId,
+      activeNote: currentActive,
+    };
+  }
+
+  return {
+    activeNoteId,
+    activeNote: await noteGet(activeNoteId),
+  };
 }
 
 export const useNoteStore = create<NoteStoreState>((set, get) => {
   const refreshVisibleNotes = async (preferredId?: string | null) => {
     const notes = await loadVisibleNotes(get().searchQuery);
-    const { activeNoteId, activeNote } = resolveActiveNote(
+    const { activeNoteId, activeNote } = await resolveActiveNote(
       notes,
       preferredId ?? get().activeNoteId,
+      get().activeNote,
     );
 
     set({
@@ -107,10 +145,11 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
     async loadNotes() {
       set({ isLoading: true, error: null });
       try {
-        const notes = sortNotes(await noteList(false));
-        const { activeNoteId, activeNote } = resolveActiveNote(
+        const notes = sortNotes(await noteListMeta(false));
+        const { activeNoteId, activeNote } = await resolveActiveNote(
           notes,
           get().activeNoteId,
+          get().activeNote,
         );
 
         set({
@@ -131,9 +170,10 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
       set({ isLoading: true, error: null });
       try {
         const notes = await loadVisibleNotes(query);
-        const { activeNoteId, activeNote } = resolveActiveNote(
+        const { activeNoteId, activeNote } = await resolveActiveNote(
           notes,
           get().activeNoteId,
+          get().activeNote,
         );
 
         set({
@@ -162,7 +202,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
           bodyText: noteType === "prompt" ? promptTemplateText() : created.bodyText,
         });
 
-        const notes = sortNotes(await noteList(false));
+        const notes = sortNotes(await noteListMeta(false));
         set({
           notes,
           activeNoteId: created.id,
@@ -212,9 +252,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
         set((state) => ({
           activeNote: updated,
           saveState: "saved",
-          notes: sortNotes(
-            state.notes.map((note) => (note.id === updated.id ? updated : note)),
-          ),
+          notes: upsertNoteMeta(state.notes, toNoteMeta(updated)),
         }));
       } catch (error) {
         set({ error: String(error), saveState: "error" });
@@ -222,8 +260,16 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
     },
 
     async saveBody(id, title, bodyJson, bodyText) {
-      const existing = get().notes.find((note) => note.id === id);
-      if (existing && existing.bodyJson === bodyJson && existing.bodyText === bodyText) return;
+      const active = get().activeNote;
+      if (!active || active.id !== id) return;
+
+      if (
+        active.title === title &&
+        active.bodyJson === bodyJson &&
+        active.bodyText === bodyText
+      ) {
+        return;
+      }
 
       set({ error: null, saveState: "saving" });
       try {
@@ -240,9 +286,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
               ? updated
               : state.activeNote,
           saveState: "saved",
-          notes: sortNotes(
-            state.notes.map((note) => (note.id === updated.id ? updated : note)),
-          ),
+          notes: upsertNoteMeta(state.notes, toNoteMeta(updated)),
         }));
       } catch (error) {
         set({ error: String(error), saveState: "error" });

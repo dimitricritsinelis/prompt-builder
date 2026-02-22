@@ -43,6 +43,7 @@ Key docs:
 
 ### Run desktop app (Tauri)
 - `pnpm prompt`
+- If dev startup gets stuck on stale processes/ports: `pnpm run prompt:hard-reset`
 
 ### Run web-only (optional, if configured)
 - `pnpm dev`
@@ -53,6 +54,8 @@ Frontend:
 - `pnpm lint`
 - `pnpm test` (Vitest)
 - `pnpm build` (Vite)
+- Fast loop: `pnpm run verify:quick`
+- Full gate: `pnpm run verify:full`
 
 Backend (from `src-tauri/`):
 - `cargo fmt --all`

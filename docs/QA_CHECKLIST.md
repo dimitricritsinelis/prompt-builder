@@ -19,13 +19,8 @@ Prompt blocks:
 - Placeholders display in empty blocks
 
 Exports:
-- Export current note: markdown
-- Export current note: json
-- Export provider format: Claude + OpenAI
-- Bulk export: markdown folder
-- Bulk export: json archive
-- Import markdown (becomes freeform)
-- Import json (lossless restore)
+- Export/import checks are deferred until export commands are implemented and wired.
+- Current runtime command surface is limited to notes CRUD/search/pin/trash/reindex.
 
 Shortcuts:
 - Cmd/Ctrl+N, Cmd/Ctrl+Shift+N
