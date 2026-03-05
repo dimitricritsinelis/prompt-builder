@@ -49,7 +49,7 @@ JSON shape:
 - Slash menu: typing `/` at empty line start opens filtered dropdown
 - Toolbar: “Insert Block” dropdown
 
-## Prompt note template
+## Prompt block insertion behavior
 
-Creating a prompt note should insert all six blocks in order, empty with placeholders.
-Freeform notes start blank.
+Prompts start blank.
+Prompt blocks are available for manual insertion via slash menu/toolbar and can be used in any prompt.

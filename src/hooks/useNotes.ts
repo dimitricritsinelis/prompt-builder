@@ -11,7 +11,6 @@ type UseNotesResult = {
   saveState: "idle" | "saving" | "saved" | "error";
   error: string | null;
   createFreeformNote: () => Promise<void>;
-  createPromptNote: () => Promise<void>;
   setActiveNote: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   updateTitle: (title: string) => Promise<void>;
@@ -73,8 +72,7 @@ export function useNotes(): UseNotesResult {
     return () => window.clearTimeout(timeoutId);
   }, [hasLoaded, loadNotes, searchNotes, searchQuery]);
 
-  const createFreeformNote = useCallback(() => createNote("freeform"), [createNote]);
-  const createPromptNote = useCallback(() => createNote("prompt"), [createNote]);
+  const createFreeformNote = useCallback(() => createNote(), [createNote]);
 
   return {
     notes,
@@ -85,7 +83,6 @@ export function useNotes(): UseNotesResult {
     saveState,
     error,
     createFreeformNote,
-    createPromptNote,
     setActiveNote,
     setSearchQuery,
     updateTitle,

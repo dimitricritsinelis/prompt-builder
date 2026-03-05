@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS notes (
     title TEXT NOT NULL DEFAULT 'Untitled',
     body_json TEXT NOT NULL DEFAULT '{}',          -- TipTap JSON (source of truth)
     body_text TEXT NOT NULL DEFAULT '',            -- Plain text extract (FTS only)
-    note_type TEXT NOT NULL DEFAULT 'freeform',    -- 'freeform' | 'prompt'
+    note_type TEXT NOT NULL DEFAULT 'freeform',    -- fixed to 'freeform'
     meta_json TEXT,                                -- nullable metadata (tags, etc.)
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -60,7 +60,7 @@ CREATE INDEX idx_notes_trashed ON notes(is_trashed);
 
 - `body_json` is the authoritative content.
 - `body_text` is a derived extraction for search only.
-- Note updates must update both fields in one transaction.
+- Prompt updates must update both fields in one transaction.
 
 ## Reindex
 

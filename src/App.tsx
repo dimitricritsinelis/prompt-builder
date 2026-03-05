@@ -102,7 +102,6 @@ function App() {
     saveState,
     error,
     createFreeformNote,
-    createPromptNote,
     setActiveNote,
     setSearchQuery,
     updateTitle,
@@ -328,11 +327,7 @@ function App() {
       const key = event.key.toLowerCase();
       if (key === "n") {
         event.preventDefault();
-        if (event.shiftKey) {
-          void createPromptNote();
-        } else {
-          void createFreeformNote();
-        }
+        void createFreeformNote();
         return;
       }
 
@@ -362,7 +357,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeydown);
     };
-  }, [createFreeformNote, createPromptNote]);
+  }, [createFreeformNote]);
 
   useEffect(() => {
     if (!hintToast) return;
@@ -469,9 +464,6 @@ function App() {
           onNewNote={() => {
             void createFreeformNote();
           }}
-          onNewPrompt={() => {
-            void createPromptNote();
-          }}
           notes={notes}
           activeNoteId={activeNoteId}
           onSelectNote={(id) => {
@@ -506,6 +498,7 @@ function App() {
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <EditorPane
             activeNote={activeNote}
+            editorBodyText={editorBodyText}
             onUpdateTitle={handleUpdateTitle}
             onSaveBody={handleSaveBody}
             onStatsChange={handleStatsChange}

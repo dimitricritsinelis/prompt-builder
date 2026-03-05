@@ -2,8 +2,8 @@ use crate::db::{Db, Note, NoteMeta};
 use tauri::State;
 
 #[tauri::command]
-pub fn note_create(db: State<'_, Db>, note_type: String) -> Result<Note, String> {
-    db.create_note(&note_type)
+pub fn note_create(db: State<'_, Db>) -> Result<Note, String> {
+    db.create_note()
 }
 
 #[tauri::command]

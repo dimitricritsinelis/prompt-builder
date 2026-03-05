@@ -8,6 +8,7 @@ use tauri::Manager;
 use uuid::Uuid;
 
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
+const MIGRATION_002: &str = include_str!("../migrations/002_remove_prompt_notes.sql");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,18 +86,12 @@ impl Db {
         Ok(db)
     }
 
-    pub fn create_note(&self, note_type: &str) -> Result<Note, String> {
-        if note_type != "freeform" && note_type != "prompt" {
-            return Err(format!(
-                "invalid note_type '{note_type}', expected 'freeform' or 'prompt'"
-            ));
-        }
-
+    pub fn create_note(&self) -> Result<Note, String> {
         let id = Uuid::new_v4().to_string();
         let conn = self.get_conn()?;
         conn.execute(
             "INSERT INTO notes (id, note_type) VALUES (?1, ?2)",
-            params![id, note_type],
+            params![id, "freeform"],
         )
         .map_err(|error| format!("failed to create note: {error}"))?;
         drop(conn);
@@ -397,6 +392,11 @@ impl Db {
                 .map_err(|error| format!("failed to apply migration version 1: {error}"))?;
         }
 
+        if current_version < 2 {
+            tx.execute_batch(MIGRATION_002)
+                .map_err(|error| format!("failed to apply migration version 2: {error}"))?;
+        }
+
         tx.commit()
             .map_err(|error| format!("failed to commit migrations: {error}"))?;
         Ok(())
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn creates_note_with_defaults() {
         let db = Db::initialize_in_memory().expect("in-memory db should initialize");
-        let note = db.create_note("freeform").expect("note should be created");
+        let note = db.create_note().expect("note should be created");
 
         assert_eq!(note.title, "Untitled");
         assert_eq!(note.body_json, "{}");
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn updates_note_in_single_record() {
         let db = Db::initialize_in_memory().expect("in-memory db should initialize");
-        let note = db.create_note("freeform").expect("note should be created");
+        let note = db.create_note().expect("note should be created");
 
         let updated = db
             .update_note(
@@ -470,10 +470,10 @@ mod tests {
     fn searches_notes_using_fts() {
         let db = Db::initialize_in_memory().expect("in-memory db should initialize");
         let alpha = db
-            .create_note("freeform")
+            .create_note()
             .expect("alpha note should be created");
         let beta = db
-            .create_note("prompt")
+            .create_note()
             .expect("beta note should be created");
 
         db.update_note(
@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn lists_note_metadata_without_loading_body_fields() {
         let db = Db::initialize_in_memory().expect("in-memory db should initialize");
-        let note = db.create_note("prompt").expect("note should be created");
+        let note = db.create_note().expect("note should be created");
 
         db.set_note_pinned(&note.id, true)
             .expect("note should be pinnable");
@@ -511,7 +511,7 @@ mod tests {
 
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, note.id);
-        assert_eq!(listed[0].note_type, "prompt");
+        assert_eq!(listed[0].note_type, "freeform");
         assert!(listed[0].is_pinned);
         assert!(!listed[0].is_trashed);
     }
@@ -520,10 +520,10 @@ mod tests {
     fn searches_note_metadata_using_fts() {
         let db = Db::initialize_in_memory().expect("in-memory db should initialize");
         let alpha = db
-            .create_note("freeform")
+            .create_note()
             .expect("alpha note should be created");
         let beta = db
-            .create_note("freeform")
+            .create_note()
             .expect("beta note should be created");
 
         db.update_note(

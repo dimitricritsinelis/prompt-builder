@@ -2,13 +2,13 @@
 
 Version: 1.0 (Feb 2026)
 
-PromptPad is a lightweight desktop notes app purpose-built for writing and organizing LLM prompts.
+PromptPad is a lightweight desktop prompt app purpose-built for writing and organizing LLM prompts.
 It should feel like a warm, thoughtful notepad — not an IDE and not a chat interface.
 
 ## Success criteria
 
 - Cold start feels instant (< ~1s target)
-- Create/edit prompts quickly
+- Create prompts quickly
 - Optional prompt structure via blocks, never forced
 - Export to provider-friendly formats (Claude XML tags, GPT markdown delimiters)
 - All data local, no accounts/cloud
@@ -29,22 +29,21 @@ It should feel like a warm, thoughtful notepad — not an IDE and not a chat int
 ## Core UX
 
 Layout:
-- Sidebar (fixed ~260px): search, new note buttons, pinned, note list grouped by recency
+- Sidebar (fixed ~260px): search, new prompt button, pinned, prompt list grouped by recency
 - Editor pane: centered content (max 720px)
-- Status bar: save state + word count + block count + note type badge
+- Status bar: save state + word count + block count + prompt type badge
 
-Notes:
-- Two note types:
+Prompts:
+- Single stored type:
   - freeform: blank doc
-  - prompt: pre-populated with blocks (Role → Context → Task → Constraints → Examples → Output Format)
 
 Autosave:
 - 1000ms debounce after last keystroke
-- also save on blur / note switch
+- also save on blur / prompt switch
 - transactional update of `body_json` + `body_text`
 
 Shortcuts:
-- Cmd+N new freeform
+- Cmd+N new prompt
 - Cmd+Shift+N new prompt
 - Cmd+F focus search
 - Cmd+S force save
@@ -79,8 +78,8 @@ Insertion:
   - GPT: `### Role` style markdown delimiters
 
 Bulk export:
-- Markdown folder (one .md per note)
-- JSON archive (single file of all notes)
+- Markdown folder (one .md per prompt)
+- JSON archive (single file of all prompts)
 
 ## Data model (SQLite)
 

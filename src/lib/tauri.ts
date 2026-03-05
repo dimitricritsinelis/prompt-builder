@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type NoteType = "freeform" | "prompt";
+export type NoteType = "freeform";
 
 export type Note = {
   id: string;
@@ -32,8 +32,8 @@ export type NoteUpdateInput = {
   bodyText: string;
 };
 
-export async function noteCreate(noteType: NoteType): Promise<Note> {
-  return invoke<Note>("note_create", { noteType });
+export async function noteCreate(): Promise<Note> {
+  return invoke<Note>("note_create");
 }
 
 export async function noteGet(id: string): Promise<Note> {

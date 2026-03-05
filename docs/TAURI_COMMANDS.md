@@ -8,7 +8,7 @@ Notes:
 
 ## Notes
 
-- `note_create(note_type: string) -> Note`
+- `note_create() -> Note`
 - `note_get(id: string) -> Note`
 - `note_update(id: string, title: string, body_json: string, body_text: string) -> Note`
 - `note_delete(id: string) -> void`
