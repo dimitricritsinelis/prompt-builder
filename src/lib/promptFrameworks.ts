@@ -241,7 +241,7 @@ export const PROMPT_FRAMEWORKS: PromptFrameworkDefinition[] = [
       {
         sectionKey: "changelog",
         label: "CHANGELOG",
-        helper: "Notes for maintaining the prompt over time",
+        helper: "Changelog entries for maintaining the prompt over time",
         defaultEnabled: false,
       },
     ],
@@ -355,4 +355,3 @@ export function createPromptSectionNode(
     content: [paragraph],
   };
 }
-

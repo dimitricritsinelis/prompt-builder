@@ -2,7 +2,6 @@ import { create } from "zustand";
 import {
   type Note,
   type NoteMeta,
-  type NoteType,
   noteCreate,
   noteDelete,
   noteGet,
@@ -12,7 +11,6 @@ import {
   noteSearchMeta,
   noteUpdate,
 } from "../lib/tauri";
-import { promptTemplateDoc, promptTemplateText } from "../lib/promptBlocks";
 
 type NoteStoreState = {
   notes: NoteMeta[];
@@ -25,7 +23,7 @@ type NoteStoreState = {
   error: string | null;
   loadNotes: () => Promise<void>;
   searchNotes: (query: string) => Promise<void>;
-  createNote: (noteType: NoteType) => Promise<void>;
+  createNote: () => Promise<void>;
   setActiveNote: (id: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   updateTitle: (title: string) => Promise<void>;
@@ -39,10 +37,6 @@ type NoteStoreState = {
   trashNote: (id: string) => Promise<void>;
   restoreNote: (id: string) => Promise<void>;
 };
-
-function defaultTitleForType(noteType: NoteType): string {
-  return noteType === "prompt" ? "Prompt" : "Note";
-}
 
 function sortNotes(notes: NoteMeta[]): NoteMeta[] {
   return [...notes].sort((a, b) => {
@@ -189,17 +183,15 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
       }
     },
 
-    async createNote(noteType) {
+    async createNote() {
       set({ isLoading: true, error: null });
       try {
-        let created = await noteCreate(noteType);
-        const baseTitle = defaultTitleForType(noteType);
+        let created = await noteCreate();
         created = await noteUpdate({
           id: created.id,
-          title: baseTitle,
-          bodyJson:
-            noteType === "prompt" ? JSON.stringify(promptTemplateDoc()) : created.bodyJson,
-          bodyText: noteType === "prompt" ? promptTemplateText() : created.bodyText,
+          title: "Prompt",
+          bodyJson: created.bodyJson,
+          bodyText: created.bodyText,
         });
 
         const notes = sortNotes(await noteListMeta(false));
@@ -237,7 +229,7 @@ export const useNoteStore = create<NoteStoreState>((set, get) => {
       const active = get().activeNote;
       if (!active) return;
 
-      const nextTitle = title.trim() || defaultTitleForType(active.noteType);
+      const nextTitle = title.trim() || "Prompt";
       if (nextTitle === active.title) return;
 
       set({ error: null, saveState: "saving" });

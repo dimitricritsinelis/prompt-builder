@@ -5,6 +5,7 @@ import { Input } from "../ui/Input";
 
 type EditorPaneProps = {
   activeNote: Note | null;
+  editorBodyText?: string;
   onUpdateTitle: (title: string) => Promise<void>;
   onSaveBody: (
     id: string,
@@ -14,6 +15,12 @@ type EditorPaneProps = {
   ) => Promise<void>;
   onStatsChange: (stats: EditorStats) => void;
 };
+
+const DEFAULT_NOTE_TITLES = ["", "untitled", "note", "prompt"];
+
+function isDefaultNoteTitle(title: string): boolean {
+  return DEFAULT_NOTE_TITLES.includes(title.trim().toLowerCase());
+}
 
 const LazyEditor = lazy(() =>
   import("../editor/Editor").then((module) => ({ default: module.Editor })),
@@ -36,13 +43,17 @@ function EditorLoadingFallback() {
 
 export function EditorPane({
   activeNote,
+  editorBodyText = "",
   onUpdateTitle,
   onSaveBody,
   onStatsChange,
 }: EditorPaneProps) {
-  const fallbackTitle = activeNote?.noteType === "prompt" ? "Prompt" : "Note";
+  const fallbackTitle = "Prompt";
   const [titleValue, setTitleValue] = useState(activeNote?.title ?? "");
   const titleTimeoutRef = useRef<number | null>(null);
+  const isBlankDefaultTitle = activeNote ? isDefaultNoteTitle(activeNote.title) : false;
+  const hasBodyText = editorBodyText.trim().length > 0;
+  const showEmptyEditorState = !activeNote || (isBlankDefaultTitle && !hasBodyText);
 
   useEffect(() => {
     setTitleValue(activeNote?.title ?? "");
@@ -94,6 +105,17 @@ export function EditorPane({
 
           {activeNote ? (
             <div className="mt-4 min-h-0 flex-1">
+              {showEmptyEditorState ? (
+                <section className="editor-placeholder-block">
+                  <p className="text-[13px] font-semibold tracking-[0.03em] text-[var(--text-primary)]">
+                    Build better prompts
+                  </p>
+                  <p className="mt-2 text-[var(--font-size-ui)] text-[var(--text-secondary)]">
+                    Start writing, then select Context Vault blocks to inject.
+                  </p>
+                </section>
+              ) : null}
+
               <Suspense fallback={<EditorLoadingFallback />}>
                 <LazyEditor
                   key={activeNote.id}
@@ -105,11 +127,11 @@ export function EditorPane({
             </div>
           ) : (
             <section className="editor-placeholder-block mt-4">
-              <p className="text-[var(--font-size-label)] font-semibold uppercase tracking-[0.04em] text-[var(--text-tertiary)]">
-                No Active Note
+              <p className="text-[13px] font-semibold tracking-[0.03em] text-[var(--text-primary)]">
+                Build better prompts
               </p>
-              <p className="mt-2">
-                Select a note from the sidebar or create one to start writing.
+              <p className="mt-2 text-[var(--font-size-ui)] text-[var(--text-secondary)]">
+                Start writing, then select Context Vault blocks to inject.
               </p>
             </section>
           )}

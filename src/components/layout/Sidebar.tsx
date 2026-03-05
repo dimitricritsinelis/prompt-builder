@@ -7,7 +7,6 @@ type SidebarProps = {
   searchValue: string;
   onSearchChange: (value: string) => void;
   onNewNote: () => void;
-  onNewPrompt: () => void;
   notes: NoteMeta[];
   activeNoteId: string | null;
   onSelectNote: (id: string) => void;
@@ -104,7 +103,7 @@ function NoteRow({
   onPinToggle: () => void;
   onTrash: () => void;
 }) {
-  const noteTypeLabel = note.noteType === "prompt" ? "Prompt" : "Note";
+  const noteTypeLabel = "Prompt";
 
   return (
     <div
@@ -136,7 +135,7 @@ function NoteRow({
             type="button"
             className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-button)] border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors duration-200 ease-in-out hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
             onClick={onPinToggle}
-            aria-label={note.isPinned ? "Unpin note" : "Pin note"}
+            aria-label={note.isPinned ? "Unpin prompt" : "Pin prompt"}
             title={note.isPinned ? "Unpin" : "Pin"}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -153,7 +152,7 @@ function NoteRow({
             type="button"
             className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-button)] border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors duration-200 ease-in-out hover:bg-[var(--bg-surface-hover)] hover:text-[var(--accent)]"
             onClick={onTrash}
-            aria-label="Move note to trash"
+            aria-label="Move prompt to trash"
             title="Trash"
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -175,7 +174,6 @@ export function Sidebar({
   searchValue,
   onSearchChange,
   onNewNote,
-  onNewPrompt,
   notes,
   activeNoteId,
   onSelectNote,
@@ -192,47 +190,49 @@ export function Sidebar({
   return (
     <aside className="flex min-h-0 w-[var(--sidebar-width)] shrink-0 flex-col overflow-hidden border-r border-[var(--border-default)] bg-[var(--bg-sidebar)]">
       <div className="flex min-h-0 flex-1 flex-col p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="font-content text-xl text-[var(--text-primary)]">PromptPad</h1>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" className="h-8 px-2" onClick={onToggleTheme}>
-              {theme === "light" ? "Dark" : "Light"}
-            </Button>
-            <PanelToggleButton
-              panel="left"
-              onClick={onToggleCollapse}
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar"
-              className="h-8 w-8 rounded-[12px]"
-            />
+        <div className="mb-4">
+          <div className="flex items-start justify-between">
+            <h1 className="font-content text-xl text-[var(--text-primary)]">PromptPad</h1>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" className="h-8 px-2" onClick={onToggleTheme}>
+                {theme === "light" ? "Dark" : "Light"}
+              </Button>
+              <PanelToggleButton
+                panel="left"
+                onClick={onToggleCollapse}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="h-8 w-8 rounded-[12px]"
+              />
+            </div>
           </div>
+          <p className="text-[11px] font-semibold tracking-[0.04em] whitespace-nowrap text-[var(--text-tertiary)]">
+            Build Better Prompts
+          </p>
         </div>
 
         <Input
           id="sidebar-search-input"
           value={searchValue}
           onChange={(event) => onSearchChange(event.currentTarget.value)}
-          placeholder="Search notes..."
-          aria-label="Search notes"
+          placeholder="Search prompts..."
+          aria-label="Search prompts"
         />
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Button variant="primary" onClick={onNewNote}>
-            New Note
-          </Button>
-          <Button variant="secondary" onClick={onNewPrompt}>
+        <div className="mt-3">
+          <Button variant="primary" onClick={onNewNote} className="w-full">
             New Prompt
           </Button>
         </div>
 
         <div className="mt-6 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
           {isLoading ? (
-            <p className="mb-2 px-1 text-[11px] text-[var(--text-tertiary)]">Loading notes...</p>
+            <p className="mb-2 px-1 text-[11px] text-[var(--text-tertiary)]">Loading prompts...</p>
           ) : null}
 
           {!isLoading && notes.length === 0 ? (
             <p className="px-1 text-[11px] text-[var(--text-tertiary)]">
-              No notes yet. Create one to get started.
+              No prompts yet. Create one to get started.
             </p>
           ) : null}
 
@@ -284,7 +284,7 @@ export function Sidebar({
       </div>
 
       <footer className="flex h-[var(--status-height)] items-center border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-4 text-[11px] text-[var(--text-secondary)]">
-        {notes.length} notes
+        {notes.length} {notes.length === 1 ? "prompt" : "prompts"}
       </footer>
     </aside>
   );

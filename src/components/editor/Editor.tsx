@@ -703,7 +703,7 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
           </div>
 
           {hasAppliedFramework ? (
-            <p className="editor-framework-live-note">The checklist now controls sections in the note.</p>
+            <p className="editor-framework-live-note">The checklist now controls sections in the prompt.</p>
           ) : null}
         </section>
       ) : null}
@@ -879,7 +879,7 @@ export function Editor({ note, onSaveBody, onStatsChange }: EditorProps) {
           <div className="editor-template-modal">
             <h3>Apply framework</h3>
             <p>
-              This note already has content. Choose how to apply the selected framework sections.
+              This prompt already has content. Choose how to apply the selected framework sections.
             </p>
             <div className="editor-template-modal-actions">
               <button
